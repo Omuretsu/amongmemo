@@ -13,7 +13,7 @@
     <section>
       <h2>試合設定 <small>AirShip / 10〜13人</small></h2>
       <div class="row"><label class="grow">自分の名前<select id="me" style="width:100%"></select></label><label>役職<select id="role"><option>クルー</option><option>インポスター</option><option>第三陣営</option></select></label></div>
-      <div class="row" style="margin-top:10px"><button id="manageMembers" class="secondary">メンバー管理</button><button id="importMembers" class="secondary">JSON読込</button><button id="exportMembers" class="secondary">JSON保存</button><input type="file" id="memberFile" accept="application/json" class="hidden"></div>
+      <div class="row" style="margin-top:10px"><button id="manageMembers" class="secondary">メンバー管理</button><button id="importMembers" class="secondary">JSON読込</button><button id="exportMembers" class="secondary">全員JSON保存</button><input type="file" id="memberFile" accept="application/json" multiple class="hidden"></div>
       <p class="shortcuts">登録メンバーから今回の参加者を選びます。データはこのブラウザに保存されます。</p>
       <div id="players" class="players" style="margin-top:10px"></div>
     </section>
@@ -32,11 +32,12 @@
   </div>
 </main>
 
-<dialog id="membersDialog"><h2>メンバー管理</h2><div class="row"><input id="newMemberName" class="grow" placeholder="名前を入力して追加"><button id="addMember">追加</button></div><div id="memberList" class="log" style="margin-top:12px"></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary closeDialog">閉じる</button></div></dialog>
+<dialog id="membersDialog"><h2>メンバー管理</h2><div class="row"><input id="newMemberName" class="grow" placeholder="名前を入力して追加"><button id="addMember">追加</button></div><p class="shortcuts">個別JSONはダウンロード後、Git管理外の <code>private/players/</code> へ移してください。</p><div id="memberList" class="log" style="margin-top:12px"></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary closeDialog">閉じる</button></div></dialog>
 <dialog id="saboDialog"><h2>妨害修理を記録</h2><div class="formgrid"><label>妨害<select id="saboType"><option>通信</option><option>停電</option><option>原子炉</option><option>ドア</option><option>その他</option></select></label><label>修理者<select id="saboFixer"></select></label><label>場所<input id="saboPlace" placeholder="例：通信室"></label><label>補足<input id="saboNote" placeholder="任意"></label></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary closeDialog">キャンセル</button><button id="saveSabo">記録</button></div></dialog>
 <dialog id="meetingDialog"><h2>会議を記録</h2><div class="formgrid"><label>会議種別<select id="meetingType"><option value="button">緊急ボタン</option><option value="report">死体通報</option></select></label><label>起票者（ボタン使用者／通報者）<select id="reporter"></select></label><label id="victimWrap">死亡者<select id="victim"></select></label><label id="bodyPlaceWrap">死体の発見場所<input id="bodyPlace" placeholder="例：アーカイブ"></label><label class="full">視認情報<input id="witness" placeholder="例：T2終盤、AliceがBobを金庫室で視認"></label><label class="full">会議メモ<input id="meetingNote" placeholder="発言・推理・重要情報"></label><label>投票・結果<input id="meetingResult" placeholder="例：Charlie追放（不明）／スキップ"></label><div class="full"><label>キル不可能者（この死亡への白根拠）</label><div id="alibiPeople" class="checklist"></div></div><label class="full">不可能の理由・補足<textarea id="alibiReason" placeholder="例：T2終盤までBobと金庫室に同席。自分が視認。"></textarea></label></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary closeDialog">キャンセル</button><button id="saveMeeting">会議を保存</button></div></dialog>
 <div id="toast"></div>
 
+<script src="private/settings.js"></script>
 <script src="js/map-data.js"></script>
 <script src="js/app.js"></script>
 </body>
