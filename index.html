@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<header><h1>AMONG <span>MEMO</span></h1><div class="row"><button class="secondary small" id="newGame">参加者を選択</button><button class="danger small" id="endGame">ゲームを終了</button><button class="secondary small" id="copyLog">テキストをコピー</button></div><span class="server-status" id="serverStatus">サーバー確認中</span><span class="status" id="saveStatus">自動保存済み</span></header>
+<header><h1>AMONG <span>MEMO</span></h1><div class="row"><button class="secondary small" id="newGame">参加者を選択</button><button class="danger small" id="endGame">ゲームを終了</button><button class="secondary small" id="copyLog">テキストをコピー</button></div><span class="server-status" id="serverStatus">サーバー確認中</span><span class="status" id="saveStatus">自動保存済み</span><button class="secondary small shortcut-toggle" id="shortcutToggle" type="button" aria-pressed="true">ショートカット ON</button></header>
 <main>
   <div class="grid">
     <section>
@@ -22,7 +22,7 @@
     <section class="span2">
       <div class="row between"><h2>現在のターン <small id="turnLabel">T1</small></h2><button id="finishTurn" class="secondary">ターンを確定</button></div>
       <div class="row"><label class="grow">自分の移動経路<div id="path" class="path"></div></label></div>
-      <div class="airship-map" id="roomButtons" aria-label="AirShipの部屋配置"></div><p class="shortcuts">マップ上の部屋を押すか、各ボタン右側の<span class="shortcut">緑色のキー</span>で移動先を追加（<span class="shortcut">⇧</span>はShiftキー）。妨害は<span class="shortcut">1：停電</span> / <span class="shortcut">2：コミュニケーション</span> / <span class="shortcut">3：リアクター</span>で統一。数字のみ：自分が修理 / <span class="shortcut">⇧+数字</span>：発生 / <span class="shortcut">⌘+⇧+数字</span>：他者が修理。<span class="shortcut">4 / ⇧+4</span>：自分 / 他者が会議ボタンを押下、<span class="shortcut">5 / ⇧+5</span>：自分 / 他者が死体を通報。<span class="shortcut">Backspace</span> で最後を削除。</p>
+      <div class="airship-map" id="roomButtons" aria-label="AirShipの部屋配置"></div><p class="shortcuts">マップ上の部屋を押すか、各ボタン右側の<span class="shortcut">緑色のキー</span>で移動先を追加（<span class="shortcut">⇧</span>はShiftキー）。妨害は<span class="shortcut">1：停電</span> / <span class="shortcut">2：コミュニケーション</span> / <span class="shortcut">3：リアクター</span>で統一。数字のみ：自分が修理 / <span class="shortcut">⇧+数字</span>：発生 / <span class="shortcut">⌘+⇧+数字</span>：他者が修理。<span class="shortcut">4 / ⇧+4</span>：自分 / 他者が会議ボタンを押下、<span class="shortcut">5 / ⇧+5</span>：自分 / 他者が死体を通報。<span class="shortcut">⌘+Enter</span>：末尾の会議・通報記録を判定してターンを確定し、会議入力画面へ。<span class="shortcut">Backspace</span> で最後を削除。</p>
       <div class="formgrid" style="margin-top:10px"><label>自分が見た人・場所<input id="seen" placeholder="例：Alice @ メインホール、Bob @ 金庫室"></label><label>補足メモ<input id="turnNote" placeholder="例：Aliceと約10秒同席"></label></div>
       <div class="row" style="margin-top:10px"><button id="addSabo" class="secondary">＋ 妨害修理を記録</button><button id="openMeeting">会議を開始</button></div>
     </section>

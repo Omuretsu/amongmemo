@@ -18,6 +18,7 @@
   }
   if (!Object.hasOwn(state,'lastRoster')) state.lastRoster=null;
   if (!Object.hasOwn(state,'lastRules')) state.lastRules=game().rules||'';
+  if (!Object.hasOwn(state,'shortcutsEnabled')) state.shortcutsEnabled=true;
   if (!Object.hasOwn(game(),'rules')) game().rules='';
 
   function ensureSelfPlayer() {
@@ -96,6 +97,9 @@
     $('#newGame').disabled = Boolean(state.session && !state.session.awaitingNext);
     $('#newGame').textContent = state.session?.awaitingNext ? '次の参加者を選択' : state.session ? 'ゲーム進行中' : '参加者を選択';
     $('#endGame').disabled = !state.session || Boolean(state.session.awaitingNext);
+    $('#shortcutToggle').textContent = `ショートカット ${state.shortcutsEnabled?'ON':'OFF'}`;
+    $('#shortcutToggle').setAttribute('aria-pressed',String(state.shortcutsEnabled));
+    $('#shortcutToggle').classList.toggle('enabled',state.shortcutsEnabled);
     $('#players').innerHTML = activePlayers().length
       ? activePlayers().map(player => `<div class="player"><span>${esc(player.name)}${player.id===game().host?' <span class="pill">ホスト</span>':''}</span><select data-status="${esc(player.id)}"><option value="alive" ${player.status==='alive'?'selected':''}>生存</option><option value="dead" ${player.status==='dead'?'selected':''}>死亡</option><option value="ejected" ${player.status==='ejected'?'selected':''}>追放</option></select></div>`).join('')
       : '<p class="empty">メンバー管理から参加者を登録してください。</p>';
@@ -247,23 +251,48 @@
     toast(`${labels[actor].slice(3)}を経路に追加しました`);
   }
 
+  function meetingContextFromLastPathEvent() {
+    const last=game().path[game().path.length-1];
+    if (last===meetingButtonLabels.self) return {type:'button',reporter:game().me};
+    if (last===meetingButtonLabels.other) return {type:'button',reporter:''};
+    if (last===bodyReportLabels.self) return {type:'report',reporter:game().me};
+    if (last===bodyReportLabels.other) return {type:'report',reporter:''};
+    return null;
+  }
+
   function updateMeetingTypeFields() {
     const report=$('#meetingType').value==='report';
     $('#victimWrap').classList.toggle('hidden',!report);
     $('#bodyPlaceWrap').classList.toggle('hidden',!report);
   }
 
-  function openMeetingDialog(type='button') {
+  function openMeetingDialog(type='button',reporter='') {
     if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
     commitTurn();
     fillMeeting();
     $('#meetingType').value=type;
+    $('#reporter').value=reporter;
     updateMeetingTypeFields();
     $('#meetingDialog').showModal();
   }
 
+  function openMeetingFromLastPathEvent() {
+    if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
+    const context=meetingContextFromLastPathEvent();
+    if (!context) return toast('経路の最後に会議ボタンまたは死体通報を記録してください');
+    openMeetingDialog(context.type,context.reporter);
+  }
+
   document.addEventListener('keydown', event => {
-    if (event.target.matches('input,textarea,select') || document.querySelector('dialog[open]')) return;
+    if (document.querySelector('dialog[open]')) return;
+    if (!state.shortcutsEnabled) return;
+    const isMeetingConfirm=event.metaKey && event.key==='Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey;
+    if (isMeetingConfirm) {
+      openMeetingFromLastPathEvent();
+      event.preventDefault();
+      return;
+    }
+    if (event.target.matches('input,textarea,select')) return;
     if (event.key==='Backspace') {
       if (game().path.length) removePathAt(game().path.length-1);
       save();
@@ -301,6 +330,12 @@
 
   $('#seen').oninput = event => { game().seen=event.target.value; save(); };
   $('#turnNote').oninput = event => { game().note=event.target.value; save(); };
+  $('#shortcutToggle').onclick = () => {
+    state.shortcutsEnabled=!state.shortcutsEnabled;
+    save();
+    render();
+    toast(`ショートカットを${state.shortcutsEnabled?'ON':'OFF'}にしました`);
+  };
   $('#finishTurn').onclick = nextTurn;
   $('#openMeeting').onclick = () => openMeetingDialog('button');
   $('#addSabo').onclick = () => { $('#saboFixer').innerHTML=playerOptions(); openDialog('#saboDialog'); };

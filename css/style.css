@@ -9,6 +9,9 @@ h1 span { color:var(--accent); }
 .server-status.online { color:var(--accent); }
 .server-status.offline { color:var(--danger); }
 .server-status + .status { margin-left:0; }
+.shortcut-toggle { min-width:128px; white-space:nowrap; }
+.shortcut-toggle.enabled { color:#07231e; background:var(--accent); border-color:var(--accent); }
+.shortcut-toggle:not(.enabled) { color:#ffd6dc; background:#4a2530; border-color:#7b3949; }
 main { max-width:1440px; margin:auto; padding:20px 18px 42px; }
 .grid { display:grid; grid-template-columns:1.1fr 1.4fr 1fr; gap:16px; align-items:start; }
 .span2 { grid-column:span 2; }
