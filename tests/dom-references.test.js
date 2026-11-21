@@ -13,6 +13,9 @@ const missingIds = [...new Set(referencedIds)].filter(id => !htmlIds.has(id));
 
 assert.deepEqual(missingIds, []);
 assert.doesNotMatch(html, /data-roster-(?:player|host)[^>]*type="(?:checkbox|radio)"/);
+assert.match(html, /id="shortcutToggle"/);
+assert.match(script, /if \(!state\.shortcutsEnabled\) return;/);
+assert.match(script, /state\.shortcutsEnabled=!state\.shortcutsEnabled/);
 assert.match(script, /event\.code==='Digit4'/);
 assert.doesNotMatch(script, /event\.key==='4'/);
 console.log(`DOM references: ok (${new Set(referencedIds).size} ids)`);

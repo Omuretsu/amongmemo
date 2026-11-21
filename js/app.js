@@ -18,6 +18,7 @@
   }
   if (!Object.hasOwn(state,'lastRoster')) state.lastRoster=null;
   if (!Object.hasOwn(state,'lastRules')) state.lastRules=game().rules||'';
+  if (!Object.hasOwn(state,'shortcutsEnabled')) state.shortcutsEnabled=true;
   if (!Object.hasOwn(game(),'rules')) game().rules='';
 
   function ensureSelfPlayer() {
@@ -96,6 +97,9 @@
     $('#newGame').disabled = Boolean(state.session && !state.session.awaitingNext);
     $('#newGame').textContent = state.session?.awaitingNext ? '次の参加者を選択' : state.session ? 'ゲーム進行中' : '参加者を選択';
     $('#endGame').disabled = !state.session || Boolean(state.session.awaitingNext);
+    $('#shortcutToggle').textContent = `ショートカット ${state.shortcutsEnabled?'ON':'OFF'}`;
+    $('#shortcutToggle').setAttribute('aria-pressed',String(state.shortcutsEnabled));
+    $('#shortcutToggle').classList.toggle('enabled',state.shortcutsEnabled);
     $('#players').innerHTML = activePlayers().length
       ? activePlayers().map(player => `<div class="player"><span>${esc(player.name)}${player.id===game().host?' <span class="pill">ホスト</span>':''}</span><select data-status="${esc(player.id)}"><option value="alive" ${player.status==='alive'?'selected':''}>生存</option><option value="dead" ${player.status==='dead'?'selected':''}>死亡</option><option value="ejected" ${player.status==='ejected'?'selected':''}>追放</option></select></div>`).join('')
       : '<p class="empty">メンバー管理から参加者を登録してください。</p>';
@@ -264,6 +268,7 @@
 
   document.addEventListener('keydown', event => {
     if (event.target.matches('input,textarea,select') || document.querySelector('dialog[open]')) return;
+    if (!state.shortcutsEnabled) return;
     if (event.key==='Backspace') {
       if (game().path.length) removePathAt(game().path.length-1);
       save();
@@ -301,6 +306,12 @@
 
   $('#seen').oninput = event => { game().seen=event.target.value; save(); };
   $('#turnNote').oninput = event => { game().note=event.target.value; save(); };
+  $('#shortcutToggle').onclick = () => {
+    state.shortcutsEnabled=!state.shortcutsEnabled;
+    save();
+    render();
+    toast(`ショートカットを${state.shortcutsEnabled?'ON':'OFF'}にしました`);
+  };
   $('#finishTurn').onclick = nextTurn;
   $('#openMeeting').onclick = () => openMeetingDialog('button');
   $('#addSabo').onclick = () => { $('#saboFixer').innerHTML=playerOptions(); openDialog('#saboDialog'); };
