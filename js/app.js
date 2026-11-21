@@ -218,6 +218,35 @@
     toast(`${message}を経路に追加しました`);
   }
 
+  const meetingButtonLabels = {
+    self:'🔔 自分が会議ボタンを押下',
+    other:'🔔 他者が会議ボタンを押下'
+  };
+  const bodyReportLabels = {
+    self:'📣 自分が死体を通報',
+    other:'📣 他者が死体を通報'
+  };
+
+  function hasUsedOwnMeetingButton() {
+    if (game().path.includes(meetingButtonLabels.self)) return true;
+    return game().timeline.some(item =>
+      (item.kind==='turn' && item.path?.includes(meetingButtonLabels.self)) ||
+      (item.kind==='meeting' && item.type==='button' && item.reporter===game().me)
+    );
+  }
+
+  function quickMeetingEvent(kind,actor='self') {
+    if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
+    if (kind==='button' && actor==='self' && hasUsedOwnMeetingButton()) {
+      return toast('自分の会議ボタンはすでに使用済みです');
+    }
+    const labels=kind==='button'?meetingButtonLabels:bodyReportLabels;
+    game().path.push(labels[actor]);
+    save();
+    render();
+    toast(`${labels[actor].slice(3)}を経路に追加しました`);
+  }
+
   function updateMeetingTypeFields() {
     const report=$('#meetingType').value==='report';
     $('#victimWrap').classList.toggle('hidden',!report);
@@ -250,8 +279,14 @@
       event.preventDefault();
       return;
     }
-    if (event.key==='4') {
-      openMeetingDialog('button');
+    const isPlainOrShift=!event.altKey && !event.ctrlKey && !event.metaKey;
+    if (event.code==='Digit4' && isPlainOrShift) {
+      quickMeetingEvent('button',event.shiftKey?'other':'self');
+      event.preventDefault();
+      return;
+    }
+    if (event.code==='Digit5' && isPlainOrShift) {
+      quickMeetingEvent('report',event.shiftKey?'other':'self');
       event.preventDefault();
       return;
     }

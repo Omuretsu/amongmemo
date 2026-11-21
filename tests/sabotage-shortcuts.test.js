@@ -9,8 +9,15 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 assert.match(script, /'Digit1':'停電','Digit2':'コミュニケーション','Digit3':'リアクター'/);
 assert.match(script, /event\.metaKey&&event\.shiftKey\?'other':event\.shiftKey\?'occurred':'self'/);
 assert.match(script, /event\.metaKey && !event\.shiftKey/);
+assert.match(script, /event\.code==='Digit4'/);
+assert.match(script, /quickMeetingEvent\('button',event\.shiftKey\?'other':'self'\)/);
+assert.match(script, /event\.code==='Digit5'/);
+assert.match(script, /quickMeetingEvent\('report',event\.shiftKey\?'other':'self'\)/);
+assert.match(script, /hasUsedOwnMeetingButton\(\)/);
 assert.match(html, /1：停電/);
 assert.match(html, /2：コミュニケーション/);
 assert.match(html, /3：リアクター/);
+assert.match(html, /4 \/ ⇧\+4/);
+assert.match(html, /5 \/ ⇧\+5/);
 
 console.log('Sabotage shortcuts: ok');
