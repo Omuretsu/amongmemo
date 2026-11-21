@@ -251,24 +251,48 @@
     toast(`${labels[actor].slice(3)}を経路に追加しました`);
   }
 
+  function meetingContextFromLastPathEvent() {
+    const last=game().path[game().path.length-1];
+    if (last===meetingButtonLabels.self) return {type:'button',reporter:game().me};
+    if (last===meetingButtonLabels.other) return {type:'button',reporter:''};
+    if (last===bodyReportLabels.self) return {type:'report',reporter:game().me};
+    if (last===bodyReportLabels.other) return {type:'report',reporter:''};
+    return null;
+  }
+
   function updateMeetingTypeFields() {
     const report=$('#meetingType').value==='report';
     $('#victimWrap').classList.toggle('hidden',!report);
     $('#bodyPlaceWrap').classList.toggle('hidden',!report);
   }
 
-  function openMeetingDialog(type='button') {
+  function openMeetingDialog(type='button',reporter='') {
     if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
     commitTurn();
     fillMeeting();
     $('#meetingType').value=type;
+    $('#reporter').value=reporter;
     updateMeetingTypeFields();
     $('#meetingDialog').showModal();
   }
 
+  function openMeetingFromLastPathEvent() {
+    if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
+    const context=meetingContextFromLastPathEvent();
+    if (!context) return toast('経路の最後に会議ボタンまたは死体通報を記録してください');
+    openMeetingDialog(context.type,context.reporter);
+  }
+
   document.addEventListener('keydown', event => {
-    if (event.target.matches('input,textarea,select') || document.querySelector('dialog[open]')) return;
+    if (document.querySelector('dialog[open]')) return;
     if (!state.shortcutsEnabled) return;
+    const isMeetingConfirm=event.metaKey && event.key==='Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey;
+    if (isMeetingConfirm) {
+      openMeetingFromLastPathEvent();
+      event.preventDefault();
+      return;
+    }
+    if (event.target.matches('input,textarea,select')) return;
     if (event.key==='Backspace') {
       if (game().path.length) removePathAt(game().path.length-1);
       save();
