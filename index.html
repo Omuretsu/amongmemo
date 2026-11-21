@@ -7,21 +7,22 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<header><h1>AMONG <span>MEMO</span></h1><div class="row"><button class="secondary small" id="newGame">新規ゲーム</button><button class="secondary small" id="copyLog">テキストをコピー</button></div><span class="status" id="saveStatus">自動保存済み</span></header>
+<header><h1>AMONG <span>MEMO</span></h1><div class="row"><button class="secondary small" id="newGame">参加者を選択</button><button class="danger small" id="endGame">ゲームを終了</button><button class="secondary small" id="copyLog">テキストをコピー</button></div><span class="server-status" id="serverStatus">サーバー確認中</span><span class="status" id="saveStatus">自動保存済み</span></header>
 <main>
   <div class="grid">
     <section>
-      <h2>試合設定 <small>AirShip / 10〜13人</small></h2>
-      <div class="row"><label class="grow">自分の名前<select id="me" style="width:100%"></select></label><label>役職<select id="role"><option>クルー</option><option>インポスター</option><option>第三陣営</option></select></label></div>
-      <div class="row" style="margin-top:10px"><button id="manageMembers" class="secondary">メンバー管理</button><button id="importMembers" class="secondary">JSON読込</button><button id="exportMembers" class="secondary">全員JSON保存</button><input type="file" id="memberFile" accept="application/json" multiple class="hidden"></div>
-      <p class="shortcuts">登録メンバーから今回の参加者を選びます。データはこのブラウザに保存されます。</p>
+      <h2>試合設定 <small>AirShip / 10〜13人 / <span id="sessionLabel">未開始</span></small></h2>
+      <div class="row"><label class="grow">自分の名前<span class="fixed-value" id="meName">読込中…</span></label><label class="grow">今回の役職<span class="fixed-value" id="roleName">未設定</span></label></div>
+      <div class="rule-summary"><b>ルール</b><span id="rulesSummary">未設定</span></div>
+      <div class="row" style="margin-top:10px"><button id="manageMembers" class="secondary">メンバー管理</button><button id="importMembers" class="secondary">JSON読込</button><input type="file" id="memberFile" accept="application/json" multiple class="hidden"></div>
+      <p class="shortcuts">登録メンバーはサーバーへ保存されます。ゲーム開始時に今回の参加者とホストを選びます。</p>
       <div id="players" class="players" style="margin-top:10px"></div>
     </section>
 
     <section class="span2">
       <div class="row between"><h2>現在のターン <small id="turnLabel">T1</small></h2><button id="finishTurn" class="secondary">ターンを確定</button></div>
       <div class="row"><label class="grow">自分の移動経路<div id="path" class="path"></div></label></div>
-      <div class="airship-map" id="roomButtons" aria-label="AirShipの部屋配置"></div><p class="shortcuts">マップ上の部屋を押すか、各ボタン右側の<span class="shortcut">緑色のキー</span>で移動先を追加（<span class="shortcut">⇧</span>はShiftキー）。<span class="shortcut">1</span> 停電修理 / <span class="shortcut">2</span> コミュニケーション修理 / <span class="shortcut">3</span> リアクター修理を経路に追加。<span class="shortcut">Backspace</span> で最後を削除。</p>
+      <div class="airship-map" id="roomButtons" aria-label="AirShipの部屋配置"></div><p class="shortcuts">マップ上の部屋を押すか、各ボタン右側の<span class="shortcut">緑色のキー</span>で移動先を追加（<span class="shortcut">⇧</span>はShiftキー）。<span class="shortcut">1</span> 停電修理 / <span class="shortcut">2</span> コミュニケーション修理 / <span class="shortcut">3</span> リアクター修理 / <span class="shortcut">4</span> 緊急ボタン会議。<span class="shortcut">Backspace</span> で最後を削除。</p>
       <div class="formgrid" style="margin-top:10px"><label>自分が見た人・場所<input id="seen" placeholder="例：Alice @ メインホール、Bob @ 金庫室"></label><label>補足メモ<input id="turnNote" placeholder="例：Aliceと約10秒同席"></label></div>
       <div class="row" style="margin-top:10px"><button id="addSabo" class="secondary">＋ 妨害修理を記録</button><button id="openMeeting">会議を開始</button></div>
     </section>
@@ -32,12 +33,14 @@
   </div>
 </main>
 
-<dialog id="membersDialog"><h2>メンバー管理</h2><div class="row"><input id="newMemberName" class="grow" placeholder="名前を入力して追加"><button id="addMember">追加</button></div><p class="shortcuts">個別JSONはダウンロード後、Git管理外の <code>private/players/</code> へ移してください。</p><div id="memberList" class="log" style="margin-top:12px"></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary closeDialog">閉じる</button></div></dialog>
+<dialog id="membersDialog"><h2>メンバー管理</h2><div class="row"><input id="newMemberName" class="grow" placeholder="名前を入力して追加"><button id="addMember">追加</button></div><p class="shortcuts">追加したプレイヤーは <code>private/players/</code> へ保存され、次回以降も選択できます。</p><div id="memberList" class="log" style="margin-top:12px"></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary closeDialog">閉じる</button></div></dialog>
+<dialog id="rosterDialog"><h2 id="rosterTitle">本日の参加者を選択</h2><p class="shortcuts">「参加する」と「ホスト」をボタンで選択してください。ホストは1名だけ指定でき、自分は常に参加します。</p><div class="row roster-add"><input id="rosterNewMemberName" class="grow" placeholder="新しいプレイヤー名"><button id="addRosterMember">登録して参加</button></div><div id="rosterList" class="log roster-list" style="margin-top:12px"></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary" id="cancelRoster">キャンセル</button><button id="startRoster">参加者を確定</button></div></dialog>
+<dialog id="gameSettingsDialog"><h2>今回のゲーム設定</h2><div class="formgrid"><label class="full">ルール<textarea id="gameRules" placeholder="例：インポスター2、シェリフ1、その他の設定や配役"></textarea></label><label class="full">今回の自分の役職<input id="gameRole" placeholder="例：クルー、インポスター、シェリフ"></label></div><p class="shortcuts">ルール・役職のプリセット機能は後から追加できます。今回は自由入力で記録します。</p><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary" id="backToRoster">参加者選択へ戻る</button><button id="confirmGameSettings">ゲームを開始</button></div></dialog>
+<dialog id="endGameDialog"><h2>ゲームを終了</h2><p>現在のゲームを保存した後、今日のゲームを続けますか？</p><p class="shortcuts">続ける場合は、終了した人と新しく参加する人を次の画面で変更できます。</p><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary closeDialog">キャンセル</button><button class="secondary" id="saveAndContinue">保存して次のゲーム</button><button class="danger" id="saveAndEnd">保存して終了</button></div></dialog>
 <dialog id="saboDialog"><h2>妨害修理を記録</h2><div class="formgrid"><label>妨害<select id="saboType"><option>通信</option><option>停電</option><option>原子炉</option><option>ドア</option><option>その他</option></select></label><label>修理者<select id="saboFixer"></select></label><label>場所<input id="saboPlace" placeholder="例：通信室"></label><label>補足<input id="saboNote" placeholder="任意"></label></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary closeDialog">キャンセル</button><button id="saveSabo">記録</button></div></dialog>
 <dialog id="meetingDialog"><h2>会議を記録</h2><div class="formgrid"><label>会議種別<select id="meetingType"><option value="button">緊急ボタン</option><option value="report">死体通報</option></select></label><label>起票者（ボタン使用者／通報者）<select id="reporter"></select></label><label id="victimWrap">死亡者<select id="victim"></select></label><label id="bodyPlaceWrap">死体の発見場所<input id="bodyPlace" placeholder="例：アーカイブ"></label><label class="full">視認情報<input id="witness" placeholder="例：T2終盤、AliceがBobを金庫室で視認"></label><label class="full">会議メモ<input id="meetingNote" placeholder="発言・推理・重要情報"></label><label>投票・結果<input id="meetingResult" placeholder="例：Charlie追放（不明）／スキップ"></label><div class="full"><label>キル不可能者（この死亡への白根拠）</label><div id="alibiPeople" class="checklist"></div></div><label class="full">不可能の理由・補足<textarea id="alibiReason" placeholder="例：T2終盤までBobと金庫室に同席。自分が視認。"></textarea></label></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button class="secondary closeDialog">キャンセル</button><button id="saveMeeting">会議を保存</button></div></dialog>
 <div id="toast"></div>
 
-<script src="private/settings.js"></script>
 <script src="js/map-data.js"></script>
 <script src="js/app.js"></script>
 </body>
