@@ -100,7 +100,7 @@
       ? activePlayers().map(player => `<div class="player"><span>${esc(player.name)}${player.id===game().host?' <span class="pill">ホスト</span>':''}</span><select data-status="${esc(player.id)}"><option value="alive" ${player.status==='alive'?'selected':''}>生存</option><option value="dead" ${player.status==='dead'?'selected':''}>死亡</option><option value="ejected" ${player.status==='ejected'?'selected':''}>追放</option></select></div>`).join('')
       : '<p class="empty">メンバー管理から参加者を登録してください。</p>';
     $('#path').innerHTML = game().path.length
-      ? game().path.map((room,index) => `<span class="room ${room.startsWith('⚡')?'repair':''}">${esc(room)} <button data-remove-path="${index}" title="削除">×</button></span>`).join(' → ')
+      ? game().path.map((room,index) => `<span class="room ${isSabotagePathLabel(room)?'repair':''}">${esc(room)} <button data-remove-path="${index}" title="削除">×</button></span>`).join(' → ')
       : '<span class="meta">移動先を追加</span>';
     $('#seen').value = game().seen;
     $('#turnNote').value = game().note;
@@ -110,8 +110,8 @@
         : `<article class="card meeting"><h3>会議 ${item.type==='button'?'緊急ボタン':'死体通報'} <span class="pill">T${item.turn}</span></h3><div class="detail"><b>起票：</b>${esc(playerName(item.reporter))}${item.victim?`　<b>死亡：</b>${esc(playerName(item.victim))} @ ${esc(item.bodyPlace||'不明')}`:''}<br><b>視認：</b>${esc(item.witness||'—')}<br><b>結果：</b>${esc(item.result||'—')}<br><b>メモ：</b>${esc(item.note||'—')}</div>${item.alibis?.length?`<div class="tags">${item.alibis.map(alibi=>`<span class="tag">${esc(playerName(alibi.player))}：${esc(alibi.reason||'白根拠')}</span>`).join('')}</div>`:''}</article>`).join('')
       : '<p class="empty">まだ記録はありません。</p>';
     $('#saboLog').innerHTML = game().sabotages.length
-      ? [...game().sabotages].reverse().map(sabotage => `<article class="card"><h3>T${sabotage.turn} ${esc(sabotage.type)}</h3><div class="detail"><b>修理：</b>${esc(playerName(sabotage.fixer))}${sabotage.place?` @ ${esc(sabotage.place)}`:''}${sabotage.note?`<br>${esc(sabotage.note)}`:''}</div></article>`).join('')
-      : '<p class="empty">修理記録はありません。</p>';
+      ? [...game().sabotages].reverse().map(sabotage => `<article class="card"><h3>T${sabotage.turn} ${esc(normalizeSabotageType(sabotage.type))}</h3><div class="detail">${sabotage.action==='occurred'?'<b>状態：</b>発生':`<b>修理：</b>${esc(sabotage.fixer===OTHER_FIXER?'他者':playerName(sabotage.fixer))}`}${sabotage.place?` @ ${esc(sabotage.place)}`:''}${sabotage.note?`<br>${esc(sabotage.note)}`:''}</div></article>`).join('')
+      : '<p class="empty">妨害の記録はありません。</p>';
     $('#deathBoard').innerHTML = game().deaths.length
       ? [...game().deaths].reverse().map(death => `<article class="card meeting"><h3>${esc(playerName(death.victim))} <span class="dead">死亡</span> <small>T${death.turn}</small></h3><div class="detail"><b>発見：</b>${esc(playerName(death.reporter))} @ ${esc(death.bodyPlace||'不明')}<br><b>視認：</b>${esc(death.witness||'—')}</div>${death.alibis?.length?`<div class="tags">${death.alibis.map(alibi=>`<span class="tag">キル不可：${esc(playerName(alibi.player))}<br>${esc(alibi.reason||'理由未記入')}</span>`).join('')}</div>`:'<div class="meta">キル不可能者は未記録</div>'}</article>`).join('')
       : '<p class="empty">死亡情報はありません。</p>';
@@ -154,25 +154,34 @@
 
   $('#roomButtons').innerHTML = AIRSHIP_ROOMS.map(([room,key,x,y,width,height]) => `<button class="map-room" style="left:${AIRSHIP_MAP_PADDING+roomScale(x,AIRSHIP_MAP_WIDTH)}%;top:${AIRSHIP_MAP_PADDING+roomScale(y,AIRSHIP_MAP_HEIGHT)}%;width:${roomScale(width,AIRSHIP_MAP_WIDTH)}%;height:${roomScale(height,AIRSHIP_MAP_HEIGHT)}%" data-room="${esc(room)}" title="短縮キー：${keyLabel(key)}"><span class="room-name">${esc(room)}</span> <span class="map-key">${keyLabel(key)}</span></button>`).join('');
 
-  const repairLabels = {'停電':'⚡ 停電を修理','通信':'⚡ コミュニケーションを修理','原子炉':'⚡ リアクターを修理'};
-  const repairTypeForLabel = label => Object.keys(repairLabels).find(type => repairLabels[type]===label);
+  const SABOTAGE_SHORTCUTS = {'Digit1':'停電','Digit2':'コミュニケーション','Digit3':'リアクター'};
+  const OTHER_FIXER = '__other__';
+  const normalizeSabotageType = type => ({'通信':'コミュニケーション','原子炉':'リアクター'}[type] || type);
+  const sabotagePathLabel = (type,action,fixer='') => {
+    const normalized=normalizeSabotageType(type);
+    if (action==='occurred') return `⚠ ${normalized}が発生`;
+    if (fixer===OTHER_FIXER) return `⚡ ${normalized}を他者が修理`;
+    return `⚡ ${normalized}を修理`;
+  };
+  const isSabotagePathLabel = label => label.startsWith('⚡') || label.startsWith('⚠');
+  const sabotageRecordLabel = sabotage => sabotagePathLabel(sabotage.type,sabotage.action||'repaired',sabotage.fixer);
 
   function removePathAt(index) {
     const removed = game().path.splice(index,1)[0];
-    const type = repairTypeForLabel(removed);
-    if (!type) return;
+    if (!isSabotagePathLabel(removed)) return;
     for (let index=game().sabotages.length-1; index>=0; index--) {
       const sabotage = game().sabotages[index];
-      if (sabotage.turn===game().turn && sabotage.type===type && sabotage.fixer===game().me) {
+      if (sabotage.turn===game().turn && sabotageRecordLabel(sabotage)===removed) {
         game().sabotages.splice(index,1);
         break;
       }
     }
   }
 
-  function recordRepair(type,fixer,place='',note='') {
-    game().sabotages.push({turn:game().turn,type,fixer,place,note});
-    if (fixer===game().me) game().path.push(repairLabels[type] || `⚡ ${type}を修理`);
+  function recordSabotage(type,{action='repaired',fixer='',place='',note='',addToPath=false}={}) {
+    const normalized=normalizeSabotageType(type);
+    game().sabotages.push({turn:game().turn,type:normalized,action,fixer,place,note});
+    if (addToPath) game().path.push(sabotagePathLabel(normalized,action,fixer));
   }
 
   document.addEventListener('click', event => {
@@ -198,12 +207,44 @@
     }
   });
 
-  function quickRepair(type) {
-    if (!game().me) return toast('先に「自分の名前」を選択してください');
-    recordRepair(type,game().me,'','ショートカット記録');
+  function quickSabotage(type,mode='self') {
+    if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
+    const action=mode==='occurred'?'occurred':'repaired';
+    const fixer=mode==='self'?game().me:mode==='other'?OTHER_FIXER:'';
+    recordSabotage(type,{action,fixer,note:'ショートカット記録',addToPath:true});
     save();
     render();
-    toast(`${repairLabels[type].replace('⚡ ','')}を経路に追加しました`);
+    const message=mode==='occurred'?`${type}の発生`:mode==='other'?`${type}を他者が修理`:`${type}を修理`;
+    toast(`${message}を経路に追加しました`);
+  }
+
+  const meetingButtonLabels = {
+    self:'🔔 自分が会議ボタンを押下',
+    other:'🔔 他者が会議ボタンを押下'
+  };
+  const bodyReportLabels = {
+    self:'📣 自分が死体を通報',
+    other:'📣 他者が死体を通報'
+  };
+
+  function hasUsedOwnMeetingButton() {
+    if (game().path.includes(meetingButtonLabels.self)) return true;
+    return game().timeline.some(item =>
+      (item.kind==='turn' && item.path?.includes(meetingButtonLabels.self)) ||
+      (item.kind==='meeting' && item.type==='button' && item.reporter===game().me)
+    );
+  }
+
+  function quickMeetingEvent(kind,actor='self') {
+    if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
+    if (kind==='button' && actor==='self' && hasUsedOwnMeetingButton()) {
+      return toast('自分の会議ボタンはすでに使用済みです');
+    }
+    const labels=kind==='button'?meetingButtonLabels:bodyReportLabels;
+    game().path.push(labels[actor]);
+    save();
+    render();
+    toast(`${labels[actor].slice(3)}を経路に追加しました`);
   }
 
   function updateMeetingTypeFields() {
@@ -230,14 +271,22 @@
       event.preventDefault();
       return;
     }
-    const repairs = {'1':'停電','2':'通信','3':'原子炉'};
-    if (repairs[event.key]) {
-      quickRepair(repairs[event.key]);
+    const sabotageType=SABOTAGE_SHORTCUTS[event.code];
+    const hasUnsupportedModifier=event.altKey || event.ctrlKey || (event.metaKey && !event.shiftKey);
+    if (sabotageType && !hasUnsupportedModifier) {
+      const mode=event.metaKey&&event.shiftKey?'other':event.shiftKey?'occurred':'self';
+      quickSabotage(sabotageType,mode);
       event.preventDefault();
       return;
     }
-    if (event.key==='4') {
-      openMeetingDialog('button');
+    const isPlainOrShift=!event.altKey && !event.ctrlKey && !event.metaKey;
+    if (event.code==='Digit4' && isPlainOrShift) {
+      quickMeetingEvent('button',event.shiftKey?'other':'self');
+      event.preventDefault();
+      return;
+    }
+    if (event.code==='Digit5' && isPlainOrShift) {
+      quickMeetingEvent('report',event.shiftKey?'other':'self');
       event.preventDefault();
       return;
     }
@@ -258,7 +307,7 @@
   $('#saveSabo').onclick = () => {
     const fixer=$('#saboFixer').value, type=$('#saboType').value;
     if (!fixer) return toast('修理者を選択してください');
-    recordRepair(type,fixer,$('#saboPlace').value.trim(),$('#saboNote').value.trim());
+    recordSabotage(type,{fixer,place:$('#saboPlace').value.trim(),note:$('#saboNote').value.trim(),addToPath:fixer===game().me});
     $('#saboDialog').close();
     save();
     render();
