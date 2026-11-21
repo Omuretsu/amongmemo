@@ -1,0 +1,5 @@
+# Safariから書き出した個別プレイヤーデータ
+private/players/
+
+# この端末だけで使用する自分の設定
+private/settings.js

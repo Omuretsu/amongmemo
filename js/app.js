@@ -4,6 +4,27 @@
   const esc = value => String(value || '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
   let state = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || { members: [], game: { me:'', role:'クルー', participants:[], turn:1, path:[], seen:'', note:'', timeline:[], sabotages:[], deaths:[] } };
   const game = () => state.game;
+  const configuredSelf = window.AMONG_MEMO_PRIVATE?.self;
+  const previousSelf = configuredSelf && state.members.find(player => player.id===configuredSelf.id || player.name===configuredSelf.name);
+  const selfPlayer = configuredSelf ? {id:previousSelf?.id || configuredSelf.id || 'self',name:String(configuredSelf.name || '自分')} : null;
+
+  function ensureSelfPlayer() {
+    if (!selfPlayer) return;
+    const member=state.members.find(player=>player.id===selfPlayer.id);
+    if (member) member.name=selfPlayer.name;
+    else state.members.unshift({...selfPlayer});
+    const participant=game().participants.find(player=>player.id===selfPlayer.id);
+    if (participant) {
+      participant.name=selfPlayer.name;
+      participant.active=true;
+    } else {
+      game().participants.unshift({...selfPlayer,active:true,status:'alive'});
+    }
+    game().me=selfPlayer.id;
+  }
+
+  ensureSelfPlayer();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
   function save(message='自動保存済み') {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -31,6 +52,7 @@
 
   function render() {
     $('#me').innerHTML = playerOptions(game().me);
+    $('#me').disabled = Boolean(selfPlayer);
     $('#role').value = game().role;
     $('#turnLabel').textContent = `T${game().turn}`;
     $('#players').innerHTML = activePlayers().length
@@ -206,7 +228,10 @@
   $('#manageMembers').onclick = () => { renderMemberList(); openDialog('#membersDialog'); };
   function renderMemberList() {
     $('#memberList').innerHTML=state.members.length
-      ? state.members.map(member=>`<div class="row card"><span class="grow">${esc(member.name)}</span><label><input type="checkbox" data-member-active="${esc(member.id)}" ${activePlayers().some(player=>player.id===member.id)?'checked':''}> 今回参加</label><button class="danger small" data-delete-member="${esc(member.id)}">削除</button></div>`).join('')
+      ? state.members.map(member=>{
+        const isSelf=selfPlayer?.id===member.id;
+        return `<div class="row card"><span class="grow">${esc(member.name)}${isSelf?' <span class="pill alive">自分</span>':''}</span><label><input type="checkbox" data-member-active="${esc(member.id)}" ${activePlayers().some(player=>player.id===member.id)?'checked':''} ${isSelf?'disabled':''}> ${isSelf?'常時参加':'今回参加'}</label><button class="secondary small" data-export-member="${esc(member.id)}">JSON保存</button>${isSelf?'':`<button class="danger small" data-delete-member="${esc(member.id)}">削除</button>`}</div>`;
+      }).join('')
       : '<p class="empty">メンバーがいません。</p>';
   }
   $('#addMember').onclick = () => {
@@ -221,9 +246,16 @@
     render();
   };
   $('#memberList').onclick = event => {
+    const exportButton=event.target.closest('[data-export-member]');
+    if (exportButton) {
+      const member=state.members.find(player=>player.id===exportButton.dataset.exportMember);
+      if (member) downloadJson({version:1,player:{id:member.id,name:member.name}},`player-${safeFileName(member.name)}.json`);
+      return;
+    }
     const button=event.target.closest('[data-delete-member]');
     if (!button) return;
     const id=button.dataset.deleteMember;
+    if (selfPlayer?.id===id) return;
     state.members=state.members.filter(member=>member.id!==id);
     game().participants=game().participants.filter(member=>member.id!==id);
     if (game().me===id) game().me='';
@@ -235,6 +267,7 @@
     const checkbox=event.target.closest('[data-member-active]');
     if (!checkbox) return;
     const id=checkbox.dataset.memberActive;
+    if (selfPlayer?.id===id) return;
     const participant=game().participants.find(player=>player.id===id);
     if (checkbox.checked&&!participant) {
       const member=state.members.find(member=>member.id===id);
@@ -248,34 +281,50 @@
   document.querySelectorAll('.closeDialog').forEach(button => button.onclick=()=>button.closest('dialog').close());
   $('#newGame').onclick = () => {
     if (!confirm('現在の試合ログを消去して新規ゲームを開始しますか？ メンバー一覧は残ります。')) return;
-    state.game={me:'',role:'クルー',participants:state.members.map(member=>({...member,active:true,status:'alive'})),turn:1,path:[],seen:'',note:'',timeline:[],sabotages:[],deaths:[]};
+    state.game={me:selfPlayer?.id||'',role:'クルー',participants:state.members.map(member=>({...member,active:true,status:'alive'})),turn:1,path:[],seen:'',note:'',timeline:[],sabotages:[],deaths:[]};
+    ensureSelfPlayer();
     save();
     render();
     toast('新規ゲームを開始しました');
   };
-  $('#exportMembers').onclick = () => {
-    const blob=new Blob([JSON.stringify({members:state.members},null,2)],{type:'application/json'}), link=document.createElement('a');
+  function safeFileName(name) { return String(name).trim().replace(/[^\p{L}\p{N}._-]+/gu,'-') || 'player'; }
+  function downloadJson(data,fileName) {
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}), link=document.createElement('a');
     link.href=URL.createObjectURL(blob);
-    link.download='among-members.json';
+    link.download=fileName;
     link.click();
     URL.revokeObjectURL(link.href);
-    toast('メンバーJSONを保存しました');
+    toast(`${fileName}を保存しました`);
   };
+  $('#exportMembers').onclick = () => downloadJson({version:1,members:state.members.map(({id,name})=>({id,name}))},'among-members.json');
   $('#importMembers').onclick = () => $('#memberFile').click();
   $('#memberFile').onchange = async event => {
-    const file=event.target.files[0];
-    if (!file) return;
+    const files=[...event.target.files];
+    if (!files.length) return;
     try {
-      const data=JSON.parse(await file.text());
-      if (!Array.isArray(data.members)) throw Error();
-      state.members=data.members.filter(member=>member&&member.name).map(member=>({id:member.id||createId('member'),name:String(member.name)}));
-      game().participants=state.members.map(member=>({...member,active:true,status:'alive'}));
-      game().me='';
+      const imported=[];
+      for (const file of files) {
+        const data=JSON.parse(await file.text());
+        if (data.player?.name) imported.push(data.player);
+        else if (Array.isArray(data.members)) imported.push(...data.members);
+        else throw Error();
+      }
+      for (const source of imported.filter(member=>member&&member.name)) {
+        const id=source.id||createId('member');
+        const member={id,name:String(source.name)};
+        const existing=state.members.find(player=>player.id===id);
+        if (existing) existing.name=member.name;
+        else state.members.push(member);
+        const participant=game().participants.find(player=>player.id===id);
+        if (participant) participant.name=member.name;
+        else game().participants.push({...member,active:true,status:'alive'});
+      }
+      ensureSelfPlayer();
       save();
       render();
-      toast(`${state.members.length}名を読み込みました`);
+      toast(`${imported.length}名を読み込みました`);
     } catch {
-      toast('正しいメンバーJSONではありません');
+      toast('正しいプレイヤーJSONではありません');
     }
     event.target.value='';
   };
