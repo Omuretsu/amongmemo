@@ -454,7 +454,13 @@
         return `<div class="card"><span>${esc(member.name)}${isSelf?' <span class="pill alive">自分</span>':''}</span><button type="button" class="roster-toggle participant ${selected.has(member.id)?'selected':''}" data-roster-player="${esc(member.id)}" aria-pressed="${selected.has(member.id)}" ${isSelf?'disabled':''}>${selected.has(member.id)?'参加中':'参加する'}</button><button type="button" class="roster-toggle host ${host===member.id?'selected':''}" data-roster-host="${esc(member.id)}" aria-pressed="${host===member.id}">${host===member.id?'ホスト':'ホストにする'}</button></div>`;
       }).join('')
       : '<p class="empty">先にメンバー管理からプレイヤーを登録してください。</p>';
+    updateRosterCount();
     if (!$('#rosterDialog').open) openDialog('#rosterDialog');
+  }
+
+  function updateRosterCount() {
+    const count=$('#rosterList').querySelectorAll('[data-roster-player].selected').length;
+    $('#rosterCount').textContent=`${count}名を選択中`;
   }
 
   function setRosterToggle(button,selected,selectedLabel,unselectedLabel) {
@@ -479,16 +485,21 @@
         const host=$(`[data-roster-host="${playerButton.dataset.rosterPlayer}"]`);
         if (host) setRosterToggle(host,false,'ホスト','ホストにする');
       }
+      updateRosterCount();
       return;
     }
     const hostButton=event.target.closest('[data-roster-host]');
     if (!hostButton) return;
     const selected=!hostButton.classList.contains('selected');
     $('#rosterList').querySelectorAll('[data-roster-host]').forEach(button=>setRosterToggle(button,false,'ホスト','ホストにする'));
-    if (!selected) return;
+    if (!selected) {
+      updateRosterCount();
+      return;
+    }
     setRosterToggle(hostButton,true,'ホスト','ホストにする');
     const player=$(`[data-roster-player="${hostButton.dataset.rosterHost}"]`);
     if (player) setRosterToggle(player,true,'参加中','参加する');
+    updateRosterCount();
   };
 
   async function addMemberFromRoster() {
