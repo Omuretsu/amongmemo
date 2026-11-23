@@ -16,6 +16,9 @@ assert.doesNotMatch(html, /data-roster-(?:player|host)[^>]*type="(?:checkbox|rad
 assert.match(html, /id="shortcutToggle"/);
 assert.match(script, /if \(!state\.shortcutsEnabled\) return;/);
 assert.match(script, /state\.shortcutsEnabled=!state\.shortcutsEnabled/);
+assert.match(script, /item\.kind==='meeting' && item\.type==='button' && item\.reporter/);
+assert.match(script, /buttonUsers\.has\(player\.id\)/);
+assert.match(script, /meeting-button-used/);
 assert.match(script, /event\.code==='Digit4'/);
 assert.doesNotMatch(script, /event\.key==='4'/);
 console.log(`DOM references: ok (${new Set(referencedIds).size} ids)`);
