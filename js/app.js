@@ -11,6 +11,7 @@
   let serverConnected = false;
   let rosterMode = 'first';
   let pendingRoster = null;
+  let pendingMeeting = {type:'button',reporter:''};
 
   if (!Object.hasOwn(state,'session')) {
     const hasProgress=game().turn>1 || game().path.length || game().timeline.length || game().sabotages.length || game().deaths.length;
@@ -78,7 +79,14 @@
     setTimeout(() => element.classList.remove('show'), 1800);
   }
 
-  function activePlayers() { return game().participants.filter(player => player.active); }
+  function ensureParticipantNumbers() {
+    game().participants.forEach((player,index) => { player.meetingNumber=index+1; });
+  }
+
+  function activePlayers() {
+    ensureParticipantNumbers();
+    return game().participants.filter(player => player.active);
+  }
 
   function playerOptions(selected='', includeEmpty=true) {
     return `${includeEmpty ? '<option value="">選択…</option>' : ''}${activePlayers().map(player => `<option value="${esc(player.id)}" ${player.id===selected?'selected':''}>${esc(player.name)}</option>`).join('')}`;
@@ -148,16 +156,19 @@
 
   function openDialog(selector) { $(selector).showModal(); }
 
+  const meetingShortcutLabel = number => number<=9 ? String(number) : number===10 ? '0' : `⇧${number-10}`;
+
   function fillMeeting() {
-    ['reporter','victim'].forEach(id => $('#'+id).innerHTML=playerOptions());
+    $('#victim').innerHTML=playerOptions();
     $('#alibiPeople').innerHTML = activePlayers().filter(player => player.status==='alive').map(player => `<label><input type="checkbox" value="${esc(player.id)}">${esc(player.name)}</label>`).join('');
+    $('#meetingReporterList').innerHTML = activePlayers().slice(0,13).map(player => `<button type="button" class="meeting-reporter" data-meeting-reporter="${esc(player.id)}"><span class="meeting-player-number">${player.meetingNumber}</span><span class="meeting-player-name">${esc(player.name)}</span><kbd class="meeting-key">${meetingShortcutLabel(player.meetingNumber)}</kbd></button>`).join('');
   }
 
   function createId(name) { return `${Date.now()}-${Math.random().toString(36).slice(2,7)}-${name}`; }
   function createGameState(selectedIds=[],host='',gameNumber=1,sessionId='') {
     const selected=new Set(selectedIds);
     if (selfPlayer) selected.add(selfPlayer.id);
-    const participants=state.members.filter(member=>selected.has(member.id)).map(member=>({...member,active:true,status:'alive'}));
+    const participants=state.members.filter(member=>selected.has(member.id)).map((member,index)=>({...member,active:true,status:'alive',meetingNumber:index+1}));
     return {id:createId('game'),sessionId,gameNumber,me:selfPlayer?.id||'',role:'',rules:'',host,participants,turn:1,path:[],seen:'',note:'',timeline:[],sabotages:[],deaths:[]};
   }
   const keyLabel = key => key && key===key.toUpperCase() ? `⇧${key.toLowerCase()}` : key;
@@ -196,6 +207,11 @@
   }
 
   document.addEventListener('click', event => {
+    const meetingReporter = event.target.closest('[data-meeting-reporter]');
+    if (meetingReporter) {
+      selectMeetingReporter(meetingReporter.dataset.meetingReporter);
+      return;
+    }
     const room = event.target.closest('[data-room]');
     if (room) {
       game().path.push(room.dataset.room);
@@ -268,19 +284,49 @@
   }
 
   function updateMeetingTypeFields() {
-    const report=$('#meetingType').value==='report';
+    const report=pendingMeeting.type==='report';
     $('#victimWrap').classList.toggle('hidden',!report);
     $('#bodyPlaceWrap').classList.toggle('hidden',!report);
+  }
+
+  function showMeetingReporterStep() {
+    $('#meetingReporterStep').classList.remove('hidden');
+    $('#meetingDetailsStep').classList.add('hidden');
+    $('#saveMeeting').classList.add('hidden');
+  }
+
+  function selectMeetingReporter(id) {
+    const reporter=activePlayers().find(player=>player.id===id);
+    if (!reporter) return;
+    pendingMeeting.reporter=reporter.id;
+    $('#meetingReporterName').textContent=`${reporter.name}（${meetingShortcutLabel(reporter.meetingNumber)}）`;
+    $('#meetingReporterStep').classList.add('hidden');
+    $('#meetingDetailsStep').classList.remove('hidden');
+    $('#saveMeeting').classList.remove('hidden');
+    requestAnimationFrame(() => $('#witness').focus());
+  }
+
+  function meetingNumberFromShortcut(event) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return 0;
+    if (event.shiftKey) {
+      const match=event.code.match(/^Digit([1-3])$/);
+      return match ? 10+Number(match[1]) : 0;
+    }
+    if (event.code==='Digit0') return 10;
+    const match=event.code.match(/^Digit([1-9])$/);
+    return match ? Number(match[1]) : 0;
   }
 
   function openMeetingDialog(type='button',reporter='') {
     if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
     commitTurn();
+    pendingMeeting={type,reporter:''};
     fillMeeting();
-    $('#meetingType').value=type;
-    $('#reporter').value=reporter;
+    $('#meetingTypeLabel').textContent=type==='button'?'ボタン':'死体通報';
     updateMeetingTypeFields();
     $('#meetingDialog').showModal();
+    if (reporter) selectMeetingReporter(reporter);
+    else showMeetingReporterStep();
   }
 
   function openMeetingFromLastPathEvent() {
@@ -291,6 +337,16 @@
   }
 
   document.addEventListener('keydown', event => {
+    const choosingMeetingReporter=$('#meetingDialog').open && !$('#meetingReporterStep').classList.contains('hidden');
+    if (choosingMeetingReporter && state.shortcutsEnabled) {
+      const number=meetingNumberFromShortcut(event);
+      const reporter=activePlayers().find(player=>player.meetingNumber===number);
+      if (reporter) {
+        selectMeetingReporter(reporter.id);
+        event.preventDefault();
+        return;
+      }
+    }
     if (document.querySelector('dialog[open]')) return;
     if (!state.shortcutsEnabled) return;
     const isMeetingConfirm=event.metaKey && event.key==='Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey;
@@ -355,9 +411,9 @@
     render();
     toast(fixer===game().me?'修理を経路に追加しました':'修理を記録しました');
   };
-  $('#meetingType').onchange = updateMeetingTypeFields;
+  $('#changeMeetingReporter').onclick = showMeetingReporterStep;
   $('#saveMeeting').onclick = () => {
-    const type=$('#meetingType').value, reporter=$('#reporter').value, victim=$('#victim').value;
+    const type=pendingMeeting.type, reporter=pendingMeeting.reporter, victim=$('#victim').value;
     if (!reporter) return toast('起票者を選択してください');
     if (type==='report'&&!victim) return toast('死亡者を選択してください');
     const ids=[...$('#alibiPeople').querySelectorAll(':checked')].map(element=>element.value);
