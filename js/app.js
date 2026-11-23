@@ -88,7 +88,14 @@
     return activePlayers().find(player => player.id===id)?.name || state.members.find(player => player.id===id)?.name || '—';
   }
 
+  function meetingButtonUserIds() {
+    return new Set(game().timeline
+      .filter(item => item.kind==='meeting' && item.type==='button' && item.reporter)
+      .map(item => item.reporter));
+  }
+
   function render() {
+    const buttonUsers=meetingButtonUserIds();
     $('#meName').textContent = selfPlayer?.name || playerName(game().me);
     $('#roleName').textContent = game().role || '未設定';
     $('#rulesSummary').textContent = game().rules || '未設定';
@@ -101,7 +108,7 @@
     $('#shortcutToggle').setAttribute('aria-pressed',String(state.shortcutsEnabled));
     $('#shortcutToggle').classList.toggle('enabled',state.shortcutsEnabled);
     $('#players').innerHTML = activePlayers().length
-      ? activePlayers().map(player => `<div class="player"><span>${esc(player.name)}${player.id===game().host?' <span class="pill">ホスト</span>':''}</span><select data-status="${esc(player.id)}"><option value="alive" ${player.status==='alive'?'selected':''}>生存</option><option value="dead" ${player.status==='dead'?'selected':''}>死亡</option><option value="ejected" ${player.status==='ejected'?'selected':''}>追放</option></select></div>`).join('')
+      ? activePlayers().map(player => `<div class="player"><span>${esc(player.name)}${buttonUsers.has(player.id)?' <span class="meeting-button-used" title="会議ボタン使用済み" aria-label="会議ボタン使用済み">🛎️</span>':''}${player.id===game().host?' <span class="pill">ホスト</span>':''}</span><select data-status="${esc(player.id)}"><option value="alive" ${player.status==='alive'?'selected':''}>生存</option><option value="dead" ${player.status==='dead'?'selected':''}>死亡</option><option value="ejected" ${player.status==='ejected'?'selected':''}>追放</option></select></div>`).join('')
       : '<p class="empty">メンバー管理から参加者を登録してください。</p>';
     $('#path').innerHTML = game().path.length
       ? game().path.map((room,index) => `<span class="room ${isSabotagePathLabel(room)?'repair':''}">${esc(room)} <button data-remove-path="${index}" title="削除">×</button></span>`).join(' → ')

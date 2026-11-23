@@ -42,6 +42,7 @@ button.small { padding:4px 7px; font-size:12px; }
 .players { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:7px; }
 .player { display:flex; align-items:center; gap:6px; padding:7px; border:1px solid var(--line); border-radius:7px; background:#121b26; }
 .player select { padding:3px; font-size:11px; margin-left:auto; max-width:68px; }
+.meeting-button-used { margin-left:3px; font-size:1.05em; }
 .log { display:grid; gap:9px; max-height:440px; overflow:auto; padding-right:3px; }
 .card { background:#121b26; border-left:3px solid var(--blue); border-radius:6px; padding:9px; }
 .card.meeting { border-left-color:var(--warn); }
