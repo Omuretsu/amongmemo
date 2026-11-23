@@ -7,12 +7,16 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const script = fs.readFileSync(path.join(root, 'js/app.js'), 'utf8');
+const styles = fs.readFileSync(path.join(root, 'css/style.css'), 'utf8');
 const referencedIds = [...script.matchAll(/\$\('#([^']+)'\)/g)].map(match => match[1]);
 const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 const missingIds = [...new Set(referencedIds)].filter(id => !htmlIds.has(id));
 
 assert.deepEqual(missingIds, []);
 assert.doesNotMatch(html, /data-roster-(?:player|host)[^>]*type="(?:checkbox|radio)"/);
+assert.match(html, /id="rosterCount"/);
+assert.match(script, /updateRosterCount\(\)/);
+assert.match(styles, /\.roster-list \{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
 assert.match(html, /id="shortcutToggle"/);
 assert.match(script, /if \(!state\.shortcutsEnabled\) return;/);
 assert.match(script, /state\.shortcutsEnabled=!state\.shortcutsEnabled/);
