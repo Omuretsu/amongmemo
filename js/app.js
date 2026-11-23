@@ -11,7 +11,7 @@
   let serverConnected = false;
   let rosterMode = 'first';
   let pendingRoster = null;
-  let pendingMeeting = {type:'button',reporter:''};
+  let pendingMeeting = {type:'button',reporter:'',killOccurred:null,victim:''};
 
   if (!Object.hasOwn(state,'session')) {
     const hasProgress=game().turn>1 || game().path.length || game().timeline.length || game().sabotages.length || game().deaths.length;
@@ -157,11 +157,19 @@
   function openDialog(selector) { $(selector).showModal(); }
 
   const meetingShortcutLabel = number => number<=9 ? String(number) : number===10 ? '0' : `⇧${number-10}`;
+  const unavailableVictim = player => player.status==='dead' || player.status==='ejected';
+  const meetingPersonButton = (player,kind) => {
+    const unavailable=kind==='victim' && unavailableVictim(player);
+    const dataAttribute=kind==='victim'?'data-meeting-victim':'data-meeting-reporter';
+    const status=player.status==='dead'?'死亡':player.status==='ejected'?'追放':'';
+    return `<button type="button" class="meeting-person" ${dataAttribute}="${esc(player.id)}" ${unavailable?'disabled aria-disabled="true"':''}><span class="meeting-player-number">${player.meetingNumber}</span><span class="meeting-player-name">${esc(player.name)}${status?` <span class="meeting-player-status">${status}</span>`:''}</span><kbd class="meeting-key">${meetingShortcutLabel(player.meetingNumber)}</kbd></button>`;
+  };
 
   function fillMeeting() {
-    $('#victim').innerHTML=playerOptions();
     $('#alibiPeople').innerHTML = activePlayers().filter(player => player.status==='alive').map(player => `<label><input type="checkbox" value="${esc(player.id)}">${esc(player.name)}</label>`).join('');
-    $('#meetingReporterList').innerHTML = activePlayers().slice(0,13).map(player => `<button type="button" class="meeting-reporter" data-meeting-reporter="${esc(player.id)}"><span class="meeting-player-number">${player.meetingNumber}</span><span class="meeting-player-name">${esc(player.name)}</span><kbd class="meeting-key">${meetingShortcutLabel(player.meetingNumber)}</kbd></button>`).join('');
+    const players=activePlayers().slice(0,13);
+    $('#meetingReporterList').innerHTML = players.map(player=>meetingPersonButton(player,'reporter')).join('');
+    $('#meetingVictimList').innerHTML = [...players].sort((left,right)=>Number(unavailableVictim(left))-Number(unavailableVictim(right)) || left.meetingNumber-right.meetingNumber).map(player=>meetingPersonButton(player,'victim')).join('');
   }
 
   function createId(name) { return `${Date.now()}-${Math.random().toString(36).slice(2,7)}-${name}`; }
@@ -210,6 +218,16 @@
     const meetingReporter = event.target.closest('[data-meeting-reporter]');
     if (meetingReporter) {
       selectMeetingReporter(meetingReporter.dataset.meetingReporter);
+      return;
+    }
+    const meetingKill = event.target.closest('[data-meeting-kill]');
+    if (meetingKill) {
+      selectMeetingKillOccurred(meetingKill.dataset.meetingKill==='yes');
+      return;
+    }
+    const meetingVictim = event.target.closest('[data-meeting-victim]');
+    if (meetingVictim && !meetingVictim.disabled) {
+      selectMeetingVictim(meetingVictim.dataset.meetingVictim);
       return;
     }
     const room = event.target.closest('[data-room]');
@@ -285,14 +303,28 @@
 
   function updateMeetingTypeFields() {
     const report=pendingMeeting.type==='report';
-    $('#victimWrap').classList.toggle('hidden',!report);
+    const hasVictim=Boolean(pendingMeeting.victim);
     $('#bodyPlaceWrap').classList.toggle('hidden',!report);
+    $('#meetingVictimSummary').classList.toggle('hidden',!hasVictim);
+  }
+
+  function showMeetingStep(id) {
+    ['meetingReporterStep','meetingKillStep','meetingVictimStep','meetingDetailsStep'].forEach(stepId=>$('#'+stepId).classList.toggle('hidden',stepId!==id));
+    $('#saveMeeting').classList.toggle('hidden',id!=='meetingDetailsStep');
   }
 
   function showMeetingReporterStep() {
-    $('#meetingReporterStep').classList.remove('hidden');
-    $('#meetingDetailsStep').classList.add('hidden');
-    $('#saveMeeting').classList.add('hidden');
+    showMeetingStep('meetingReporterStep');
+  }
+
+  function continueMeetingFlow() {
+    if (!pendingMeeting.reporter) return showMeetingReporterStep();
+    if (pendingMeeting.type==='button' && pendingMeeting.killOccurred===null) return showMeetingStep('meetingKillStep');
+    if (pendingMeeting.type==='report') pendingMeeting.killOccurred=true;
+    if (pendingMeeting.killOccurred && !pendingMeeting.victim) return showMeetingStep('meetingVictimStep');
+    updateMeetingTypeFields();
+    showMeetingStep('meetingDetailsStep');
+    requestAnimationFrame(() => $('#witness').focus());
   }
 
   function selectMeetingReporter(id) {
@@ -300,10 +332,25 @@
     if (!reporter) return;
     pendingMeeting.reporter=reporter.id;
     $('#meetingReporterName').textContent=`${reporter.name}（${meetingShortcutLabel(reporter.meetingNumber)}）`;
-    $('#meetingReporterStep').classList.add('hidden');
-    $('#meetingDetailsStep').classList.remove('hidden');
-    $('#saveMeeting').classList.remove('hidden');
-    requestAnimationFrame(() => $('#witness').focus());
+    continueMeetingFlow();
+  }
+
+  function selectMeetingKillOccurred(killOccurred) {
+    pendingMeeting.killOccurred=killOccurred;
+    if (!killOccurred) pendingMeeting.victim='';
+    continueMeetingFlow();
+  }
+
+  function showMeetingVictimStep() {
+    showMeetingStep('meetingVictimStep');
+  }
+
+  function selectMeetingVictim(id) {
+    const victim=activePlayers().find(player=>player.id===id && !unavailableVictim(player));
+    if (!victim) return;
+    pendingMeeting.victim=victim.id;
+    $('#meetingVictimName').textContent=`${victim.name}（${meetingShortcutLabel(victim.meetingNumber)}）`;
+    continueMeetingFlow();
   }
 
   function meetingNumberFromShortcut(event) {
@@ -320,13 +367,13 @@
   function openMeetingDialog(type='button',reporter='') {
     if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
     commitTurn();
-    pendingMeeting={type,reporter:''};
+    pendingMeeting={type,reporter:'',killOccurred:type==='report'?true:null,victim:''};
     fillMeeting();
     $('#meetingTypeLabel').textContent=type==='button'?'ボタン':'死体通報';
     updateMeetingTypeFields();
     $('#meetingDialog').showModal();
     if (reporter) selectMeetingReporter(reporter);
-    else showMeetingReporterStep();
+    else continueMeetingFlow();
   }
 
   function openMeetingFromLastPathEvent() {
@@ -337,14 +384,25 @@
   }
 
   document.addEventListener('keydown', event => {
-    const choosingMeetingReporter=$('#meetingDialog').open && !$('#meetingReporterStep').classList.contains('hidden');
-    if (choosingMeetingReporter && state.shortcutsEnabled) {
-      const number=meetingNumberFromShortcut(event);
-      const reporter=activePlayers().find(player=>player.meetingNumber===number);
-      if (reporter) {
-        selectMeetingReporter(reporter.id);
+    const meetingDialogOpen=$('#meetingDialog').open;
+    if (meetingDialogOpen && state.shortcutsEnabled) {
+      const choosingKill=!$('#meetingKillStep').classList.contains('hidden');
+      const choosingReporter=!$('#meetingReporterStep').classList.contains('hidden');
+      const choosingVictim=!$('#meetingVictimStep').classList.contains('hidden');
+      if (choosingKill && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && (event.code==='Digit1' || event.code==='Digit2')) {
+        selectMeetingKillOccurred(event.code==='Digit1');
         event.preventDefault();
         return;
+      }
+      if (choosingReporter || choosingVictim) {
+        const number=meetingNumberFromShortcut(event);
+        const player=activePlayers().find(candidate=>candidate.meetingNumber===number && (!choosingVictim || !unavailableVictim(candidate)));
+        if (player) {
+          if (choosingReporter) selectMeetingReporter(player.id);
+          else selectMeetingVictim(player.id);
+          event.preventDefault();
+          return;
+        }
       }
     }
     if (document.querySelector('dialog[open]')) return;
@@ -412,16 +470,19 @@
     toast(fixer===game().me?'修理を経路に追加しました':'修理を記録しました');
   };
   $('#changeMeetingReporter').onclick = showMeetingReporterStep;
+  $('#changeMeetingVictim').onclick = showMeetingVictimStep;
   $('#saveMeeting').onclick = () => {
-    const type=pendingMeeting.type, reporter=pendingMeeting.reporter, victim=$('#victim').value;
+    const type=pendingMeeting.type, reporter=pendingMeeting.reporter, victim=pendingMeeting.victim;
+    const killOccurred=type==='report' || pendingMeeting.killOccurred===true;
     if (!reporter) return toast('起票者を選択してください');
-    if (type==='report'&&!victim) return toast('死亡者を選択してください');
+    if (type==='button' && pendingMeeting.killOccurred===null) return toast('キル発生の有無を選択してください');
+    if (killOccurred && !victim) return toast('死亡者を選択してください');
     const ids=[...$('#alibiPeople').querySelectorAll(':checked')].map(element=>element.value);
     const reason=$('#alibiReason').value.trim();
     const alibis=ids.map(player=>({player,reason}));
-    const meeting={kind:'meeting',turn:game().turn,type,reporter,victim:type==='report'?victim:'',bodyPlace:$('#bodyPlace').value.trim(),witness:$('#witness').value.trim(),note:$('#meetingNote').value.trim(),result:$('#meetingResult').value.trim(),alibis};
+    const meeting={kind:'meeting',turn:game().turn,type,reporter,killOccurred,victim:killOccurred?victim:'',bodyPlace:type==='report'?$('#bodyPlace').value.trim():'',witness:$('#witness').value.trim(),note:$('#meetingNote').value.trim(),result:$('#meetingResult').value.trim(),alibis};
     game().timeline.push(meeting);
-    if (type==='report') {
+    if (killOccurred) {
       const player=activePlayers().find(player=>player.id===victim);
       if (player) player.status='dead';
       game().deaths.push({...meeting});
