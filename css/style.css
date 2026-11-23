@@ -83,10 +83,11 @@ dialog h2 { margin-bottom:14px; }
 .checklist { display:flex; flex-wrap:wrap; gap:6px; max-height:115px; overflow:auto; padding:5px; background:#111925; border-radius:7px; }
 .checklist label { display:flex; align-items:center; gap:4px; color:var(--text); font-size:13px; }
 .checklist input { accent-color:var(--accent); }
-#rosterDialog { width:min(1180px,calc(100% - 30px)); }
+#rosterDialog { width:min(80vw,124vh); height:min(80vh,51.6vw); max-height:none; aspect-ratio:1.55/1; }
+#rosterDialog[open] { display:grid; grid-template-rows:auto auto auto minmax(0,1fr) auto; }
 .roster-heading h2 { margin:0; }
 .roster-count { padding:5px 10px; border-radius:999px; color:#07231e; background:var(--accent); font-weight:800; white-space:nowrap; }
-.roster-list { grid-template-columns:repeat(3,minmax(0,1fr)); grid-auto-rows:minmax(76px,auto); max-height:246px; gap:9px; }
+.roster-list { grid-template-columns:repeat(3,minmax(0,1fr)); grid-auto-rows:calc((100% - 18px)/3); min-height:0; max-height:none; gap:9px; }
 .roster-list .card { display:grid; grid-template-columns:minmax(0,1fr) minmax(82px,auto) minmax(92px,auto); align-items:center; gap:8px; min-width:0; }
 .roster-list .card > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .roster-toggle { color:var(--muted); background:#111925; border:1px solid var(--line); }
@@ -98,7 +99,6 @@ dialog h2 { margin-bottom:14px; }
 @media(max-width:950px) {
   .grid { grid-template-columns:1fr 1fr; }
   .span2 { grid-column:span 2; }
-  #rosterDialog { width:min(760px,calc(100% - 30px)); }
   .roster-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 
@@ -110,6 +110,7 @@ dialog h2 { margin-bottom:14px; }
   .formgrid .full { grid-column:auto; }
   .airship-map { display:grid; grid-template-columns:repeat(2,1fr); grid-auto-rows:42px; height:auto; gap:5px; padding:7px; }
   .map-room { position:relative!important; inset:auto!important; width:auto!important; height:auto!important; min-height:42px; }
+  #rosterDialog { width:calc(100% - 20px); height:calc(100% - 20px); max-height:calc(100% - 20px); aspect-ratio:auto; }
   .roster-list { grid-template-columns:1fr; }
   .roster-list .card { grid-template-columns:1fr auto; }
   .roster-list .card > span { grid-column:1/-1; }

@@ -16,6 +16,7 @@ assert.deepEqual(missingIds, []);
 assert.doesNotMatch(html, /data-roster-(?:player|host)[^>]*type="(?:checkbox|radio)"/);
 assert.match(html, /id="rosterCount"/);
 assert.match(script, /updateRosterCount\(\)/);
+assert.match(styles, /#rosterDialog \{[^}]*width:min\(80vw,124vh\)[^}]*height:min\(80vh,51\.6vw\)[^}]*aspect-ratio:1\.55\/1/);
 assert.match(styles, /\.roster-list \{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
 assert.match(html, /id="shortcutToggle"/);
 assert.match(script, /if \(!state\.shortcutsEnabled\) return;/);
