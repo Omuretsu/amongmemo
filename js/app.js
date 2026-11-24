@@ -11,7 +11,7 @@
   let serverConnected = false;
   let rosterMode = 'first';
   let pendingRoster = null;
-  let pendingMeeting = {type:'button',reporter:'',killOccurred:null,victims:[],victimsConfirmed:false};
+  let pendingMeeting = {type:'button',reporter:'',killOccurred:null,victims:[],victimsConfirmed:false,repairs:[],activeRepairIndex:-1,repairDraft:[]};
 
   if (!Object.hasOwn(state,'session')) {
     const hasProgress=game().turn>1 || game().path.length || game().timeline.length || game().sabotages.length || game().deaths.length;
@@ -107,8 +107,34 @@
       .map(item => item.reporter));
   }
 
+  function meetingRepairText(meeting) {
+    return (meeting.repairs||[])
+      .filter(repair=>repair.repairers?.length)
+      .map(repair=>`${normalizeSabotageType(repair.type)}：${repair.repairers.map(playerName).join('、')}`)
+      .join(' ／ ');
+  }
+
+  function sabotageRepairerIds(sabotage) {
+    if (!sabotage) return [];
+    if (Array.isArray(sabotage.repairers)) return [...new Set(sabotage.repairers.filter(Boolean))];
+    if (sabotage.action!=='occurred' && sabotage.fixer && sabotage.fixer!==OTHER_FIXER) return [sabotage.fixer];
+    return [];
+  }
+
+  function repairerIconSets() {
+    const blackout=new Set(), communications=new Set();
+    for (const sabotage of game().sabotages) {
+      if (sabotage.action==='occurred') continue;
+      const type=normalizeSabotageType(sabotage.type);
+      const target=type==='停電' ? blackout : type==='コミュニケーション' ? communications : null;
+      if (target) sabotageRepairerIds(sabotage).forEach(id=>target.add(id));
+    }
+    return {blackout,communications};
+  }
+
   function render() {
     const buttonUsers=meetingButtonUserIds();
+    const repairerIcons=repairerIconSets();
     $('#meName').textContent = selfPlayer?.name || playerName(game().me);
     $('#roleName').textContent = game().role || '未設定';
     $('#rulesSummary').textContent = game().rules || '未設定';
@@ -121,7 +147,7 @@
     $('#shortcutToggle').setAttribute('aria-pressed',String(state.shortcutsEnabled));
     $('#shortcutToggle').classList.toggle('enabled',state.shortcutsEnabled);
     $('#players').innerHTML = activePlayers().length
-      ? activePlayers().map(player => `<div class="player"><span>${esc(player.name)}${buttonUsers.has(player.id)?' <span class="meeting-button-used" title="会議ボタン使用済み" aria-label="会議ボタン使用済み">🛎️</span>':''}${player.id===game().host?' <span class="pill">ホスト</span>':''}</span><select data-status="${esc(player.id)}"><option value="alive" ${player.status==='alive'?'selected':''}>生存</option><option value="dead" ${player.status==='dead'?'selected':''}>死亡</option><option value="ejected" ${player.status==='ejected'?'selected':''}>追放</option></select></div>`).join('')
+      ? activePlayers().map(player => `<div class="player"><span>${esc(player.name)}${buttonUsers.has(player.id)?' <span class="meeting-button-used" title="会議ボタン使用済み" aria-label="会議ボタン使用済み">🛎️</span>':''}${repairerIcons.blackout.has(player.id)?' <span class="repairer-mark" title="停電の修理者" aria-label="停電の修理者">⚡️</span>':''}${repairerIcons.communications.has(player.id)?' <span class="repairer-mark" title="コミュニケーションの修理者" aria-label="コミュニケーションの修理者">📡</span>':''}${player.id===game().host?' <span class="pill">ホスト</span>':''}</span><select data-status="${esc(player.id)}"><option value="alive" ${player.status==='alive'?'selected':''}>生存</option><option value="dead" ${player.status==='dead'?'selected':''}>死亡</option><option value="ejected" ${player.status==='ejected'?'selected':''}>追放</option></select></div>`).join('')
       : '<p class="empty">メンバー管理から参加者を登録してください。</p>';
     $('#path').innerHTML = game().path.length
       ? game().path.map((room,index) => `<span class="room ${isSabotagePathLabel(room)?'repair':''}">${esc(room)} <button data-remove-path="${index}" title="削除">×</button></span>`).join(' → ')
@@ -131,10 +157,14 @@
     $('#timeline').innerHTML = game().timeline.length
       ? [...game().timeline].reverse().map(item => item.kind==='turn'
         ? `<article class="card"><h3>T${item.turn} <span class="pill">行動</span></h3><div class="detail"><b>経路：</b>${esc(item.path.join(' → ') || '—')}<br><b>視認：</b>${esc(item.seen || '—')}<br><b>メモ：</b>${esc(item.note || '—')}</div></article>`
-        : `<article class="card meeting"><h3>会議 ${item.type==='button'?'緊急ボタン':'死体通報'} <span class="pill">T${item.turn}</span></h3><div class="detail"><b>起票：</b>${esc(playerName(item.reporter))}${meetingVictimIds(item).length?`　<b>死亡：</b>${meetingVictimIds(item).map(playerName).map(esc).join('、')} @ ${esc(item.bodyPlace||'不明')}`:''}<br><b>視認：</b>${esc(item.witness||'—')}<br><b>結果：</b>${esc(item.result||'—')}<br><b>メモ：</b>${esc(item.note||'—')}</div>${item.alibis?.length?`<div class="tags">${item.alibis.map(alibi=>`<span class="tag">${esc(playerName(alibi.player))}：${esc(alibi.reason||'白根拠')}</span>`).join('')}</div>`:''}</article>`).join('')
+        : `<article class="card meeting"><h3>会議 ${item.type==='button'?'緊急ボタン':'死体通報'} <span class="pill">T${item.turn}</span></h3><div class="detail"><b>起票：</b>${esc(playerName(item.reporter))}${meetingVictimIds(item).length?`　<b>死亡：</b>${meetingVictimIds(item).map(playerName).map(esc).join('、')} @ ${esc(item.bodyPlace||'不明')}`:''}<br><b>視認：</b>${esc(item.witness||'—')}${meetingRepairText(item)?`<br><b>妨害修理：</b>${esc(meetingRepairText(item))}`:''}<br><b>結果：</b>${esc(item.result||'—')}<br><b>メモ：</b>${esc(item.note||'—')}</div>${item.alibis?.length?`<div class="tags">${item.alibis.map(alibi=>`<span class="tag">${esc(playerName(alibi.player))}：${esc(alibi.reason||'白根拠')}</span>`).join('')}</div>`:''}</article>`).join('')
       : '<p class="empty">まだ記録はありません。</p>';
     $('#saboLog').innerHTML = game().sabotages.length
-      ? [...game().sabotages].reverse().map(sabotage => `<article class="card"><h3>T${sabotage.turn} ${esc(normalizeSabotageType(sabotage.type))}</h3><div class="detail">${sabotage.action==='occurred'?'<b>状態：</b>発生':`<b>修理：</b>${esc(sabotage.fixer===OTHER_FIXER?'他者':playerName(sabotage.fixer))}`}${sabotage.place?` @ ${esc(sabotage.place)}`:''}${sabotage.note?`<br>${esc(sabotage.note)}`:''}</div></article>`).join('')
+      ? [...game().sabotages].reverse().map(sabotage => {
+        const repairers=sabotageRepairerIds(sabotage);
+        const repairerLabel=repairers.length ? repairers.map(playerName).join('、') : sabotage.fixer===OTHER_FIXER ? '他者（未特定）' : playerName(sabotage.fixer);
+        return `<article class="card"><h3>T${sabotage.turn} ${esc(normalizeSabotageType(sabotage.type))}</h3><div class="detail">${sabotage.action==='occurred'?'<b>状態：</b>発生':`<b>修理：</b>${esc(repairerLabel)}`}${sabotage.place?` @ ${esc(sabotage.place)}`:''}${sabotage.note?`<br>${esc(sabotage.note)}`:''}</div></article>`;
+      }).join('')
       : '<p class="empty">妨害の記録はありません。</p>';
     $('#deathBoard').innerHTML = game().deaths.length
       ? [...game().deaths].reverse().map(death => `<article class="card meeting"><h3>${esc(playerName(death.victim))} <span class="dead">死亡</span> <small>T${death.turn}</small></h3><div class="detail"><b>発見：</b>${esc(playerName(death.reporter))} @ ${esc(death.bodyPlace||'不明')}<br><b>視認：</b>${esc(death.witness||'—')}</div>${death.alibis?.length?`<div class="tags">${death.alibis.map(alibi=>`<span class="tag">キル不可：${esc(playerName(alibi.player))}<br>${esc(alibi.reason||'理由未記入')}</span>`).join('')}</div>`:'<div class="meta">キル不可能者は未記録</div>'}</article>`).join('')
@@ -172,12 +202,14 @@
   };
   const meetingPersonButton = (player,kind) => {
     const reporterBlocked=kind==='reporter' ? meetingReporterBlockReason(player) : '';
-    const unavailable=kind==='victim' ? unavailableVictim(player) : Boolean(reporterBlocked);
-    const selected=kind==='victim' && pendingMeeting.victims.includes(player.id);
-    const dataAttribute=kind==='victim'?'data-meeting-victim':'data-meeting-reporter';
+    const repairerBlocked=kind==='repairer' && player.id===game().me;
+    const unavailable=kind==='victim' ? unavailableVictim(player) : kind==='repairer' ? repairerBlocked : Boolean(reporterBlocked);
+    const selected=kind==='victim' ? pendingMeeting.victims.includes(player.id) : kind==='repairer' ? pendingMeeting.repairDraft.includes(player.id) : false;
+    const dataAttribute=kind==='victim'?'data-meeting-victim':kind==='repairer'?'data-meeting-repairer':'data-meeting-reporter';
     const status=player.status==='dead'?'死亡':player.status==='ejected'?'追放':'';
     const usedButton=kind==='reporter' && meetingButtonUserIds().has(player.id);
-    return `<button type="button" class="meeting-person${selected?' selected':''}" ${dataAttribute}="${esc(player.id)}" ${kind==='victim'?`aria-pressed="${selected}"`:''} ${unavailable?'disabled aria-disabled="true"':''} ${reporterBlocked?`title="${esc(reporterBlocked)}"`:''}><span class="meeting-player-number">${player.meetingNumber}</span><span class="meeting-player-name">${esc(player.name)}${usedButton?' <span class="meeting-button-used" aria-label="会議ボタン使用済み">🛎️</span>':''}${status?` <span class="meeting-player-status">${status}</span>`:''}</span><kbd class="meeting-key">${meetingShortcutLabel(player.meetingNumber)}</kbd></button>`;
+    const blockedReason=reporterBlocked || (repairerBlocked?'自分以外の修理者を選択してください':'');
+    return `<button type="button" class="meeting-person${selected?' selected':''}" ${dataAttribute}="${esc(player.id)}" ${kind==='victim'||kind==='repairer'?`aria-pressed="${selected}"`:''} ${unavailable?'disabled aria-disabled="true"':''} ${blockedReason?`title="${esc(blockedReason)}"`:''}><span class="meeting-player-number">${player.meetingNumber}</span><span class="meeting-player-name">${esc(player.name)}${usedButton?' <span class="meeting-button-used" aria-label="会議ボタン使用済み">🛎️</span>':''}${status?` <span class="meeting-player-status">${status}</span>`:''}</span><kbd class="meeting-key">${meetingShortcutLabel(player.meetingNumber)}</kbd></button>`;
   };
 
   function renderMeetingVictimList() {
@@ -186,12 +218,40 @@
     $('#meetingVictimCount').textContent=`${pendingMeeting.victims.length}名を選択中`;
   }
 
+  function activeMeetingRepair() {
+    return pendingMeeting.repairs[pendingMeeting.activeRepairIndex] || null;
+  }
+
+  function renderMeetingRepairSummary() {
+    const hasRepairs=pendingMeeting.repairs.length>0;
+    $('#meetingRepairSummary').classList.toggle('hidden',!hasRepairs);
+    $('#meetingRepairRecords').innerHTML=pendingMeeting.repairs.map((repair,index)=>{
+      const icon=repair.type==='停電'?'⚡️':'📡';
+      const prompt=repair.mode==='self'?'自分以外に直した人':'直した人';
+      let result='未入力';
+      if (repair.confirmed) result=repair.selected.length ? repair.selected.map(playerName).join('、') : '自分のみ';
+      return `<div class="meeting-repair-record"><div><b>${icon} ${esc(repair.type)}：${prompt}</b><div class="repair-result${repair.confirmed?' recorded':''}">${esc(result)}</div></div><button type="button" class="secondary small" data-meeting-repair-index="${index}">${repair.confirmed?'変更':'入力'}</button></div>`;
+    }).join('');
+  }
+
+  function renderMeetingRepairerList() {
+    const repair=activeMeetingRepair();
+    if (!repair) return;
+    const icon=repair.type==='停電'?'⚡️':'📡';
+    const question=repair.mode==='self'?'自分の他に誰が':'誰が';
+    $('#meetingRepairerTitle').textContent=`${icon} ${repair.type}を${question}直しましたか？`;
+    $('#meetingRepairerHelp').textContent='参加者を押すか、表示されているキーで複数選択し、⌘Enterで確定してください。自分は選択対象外です。';
+    $('#meetingRepairerList').innerHTML=activePlayers().slice(0,13).map(player=>meetingPersonButton(player,'repairer')).join('');
+    $('#meetingRepairerCount').textContent=`${pendingMeeting.repairDraft.length}名を選択中`;
+  }
+
   function fillMeeting() {
     $('#alibiPeople').innerHTML = activePlayers().filter(player => player.status==='alive').map(player => `<label><input type="checkbox" value="${esc(player.id)}">${esc(player.name)}</label>`).join('');
     const players=activePlayers().slice(0,13);
     const reporters=pendingMeeting.type==='button' ? [...players].sort((left,right)=>Number(unavailableVictim(left))-Number(unavailableVictim(right)) || left.meetingNumber-right.meetingNumber) : players;
     $('#meetingReporterList').innerHTML = reporters.map(player=>meetingPersonButton(player,'reporter')).join('');
     renderMeetingVictimList();
+    renderMeetingRepairSummary();
   }
 
   function createId(name) { return `${Date.now()}-${Math.random().toString(36).slice(2,7)}-${name}`; }
@@ -232,8 +292,24 @@
 
   function recordSabotage(type,{action='repaired',fixer='',place='',note='',addToPath=false}={}) {
     const normalized=normalizeSabotageType(type);
-    game().sabotages.push({turn:game().turn,type:normalized,action,fixer,place,note});
+    const repairers=action==='occurred' || !fixer || fixer===OTHER_FIXER ? [] : [fixer];
+    game().sabotages.push({turn:game().turn,type:normalized,action,fixer,repairers,place,note});
     if (addToPath) game().path.push(sabotagePathLabel(normalized,action,fixer));
+  }
+
+  function meetingRepairCandidatesFromCurrentPath() {
+    const remainingPath=[...game().path];
+    return game().sabotages.map((sabotage,sabotageIndex)=>({sabotage,sabotageIndex})).reduce((repairs,{sabotage,sabotageIndex})=>{
+      const type=normalizeSabotageType(sabotage.type);
+      if (sabotage.turn!==game().turn || sabotage.action==='occurred' || !['停電','コミュニケーション'].includes(type)) return repairs;
+      const pathIndex=remainingPath.indexOf(sabotageRecordLabel(sabotage));
+      if (pathIndex===-1) return repairs;
+      remainingPath.splice(pathIndex,1);
+      const mode=sabotage.fixer===game().me?'self':'other';
+      const selected=sabotageRepairerIds(sabotage).filter(id=>id!==game().me);
+      repairs.push({sabotageIndex,type,mode,selected,confirmed:selected.length>0});
+      return repairs;
+    },[]);
   }
 
   document.addEventListener('click', event => {
@@ -250,6 +326,16 @@
     const meetingVictim = event.target.closest('[data-meeting-victim]');
     if (meetingVictim && !meetingVictim.disabled) {
       selectMeetingVictim(meetingVictim.dataset.meetingVictim);
+      return;
+    }
+    const meetingRepairer = event.target.closest('[data-meeting-repairer]');
+    if (meetingRepairer && !meetingRepairer.disabled) {
+      selectMeetingRepairer(meetingRepairer.dataset.meetingRepairer);
+      return;
+    }
+    const meetingRepair = event.target.closest('[data-meeting-repair-index]');
+    if (meetingRepair) {
+      showMeetingRepairerStep(Number(meetingRepair.dataset.meetingRepairIndex));
       return;
     }
     const room = event.target.closest('[data-room]');
@@ -331,7 +417,7 @@
   }
 
   function showMeetingStep(id) {
-    ['meetingReporterStep','meetingKillStep','meetingVictimStep','meetingDetailsStep'].forEach(stepId=>$('#'+stepId).classList.toggle('hidden',stepId!==id));
+    ['meetingReporterStep','meetingKillStep','meetingVictimStep','meetingRepairerStep','meetingDetailsStep'].forEach(stepId=>$('#'+stepId).classList.toggle('hidden',stepId!==id));
     $('#saveMeeting').classList.toggle('hidden',id!=='meetingDetailsStep');
   }
 
@@ -345,6 +431,7 @@
     if (pendingMeeting.type==='report') pendingMeeting.killOccurred=true;
     if (pendingMeeting.killOccurred && (!pendingMeeting.victimsConfirmed || !pendingMeeting.victims.length)) return showMeetingVictimStep();
     updateMeetingTypeFields();
+    renderMeetingRepairSummary();
     showMeetingStep('meetingDetailsStep');
     requestAnimationFrame(() => $('#witness').focus());
   }
@@ -396,6 +483,41 @@
     continueMeetingFlow();
   }
 
+  function showMeetingRepairerStep(index) {
+    const repair=pendingMeeting.repairs[index];
+    if (!repair) return;
+    pendingMeeting.activeRepairIndex=index;
+    pendingMeeting.repairDraft=[...repair.selected];
+    renderMeetingRepairerList();
+    showMeetingStep('meetingRepairerStep');
+  }
+
+  function selectMeetingRepairer(id) {
+    const player=activePlayers().find(candidate=>candidate.id===id);
+    if (!player) return;
+    if (player.id===game().me) return toast('自分以外の修理者を選択してください');
+    const selectedIndex=pendingMeeting.repairDraft.indexOf(player.id);
+    if (selectedIndex===-1) pendingMeeting.repairDraft.push(player.id);
+    else pendingMeeting.repairDraft.splice(selectedIndex,1);
+    renderMeetingRepairerList();
+  }
+
+  function closeMeetingRepairerStep() {
+    pendingMeeting.activeRepairIndex=-1;
+    pendingMeeting.repairDraft=[];
+    renderMeetingRepairSummary();
+    showMeetingStep('meetingDetailsStep');
+  }
+
+  function confirmMeetingRepairers() {
+    const repair=activeMeetingRepair();
+    if (!repair) return;
+    if (repair.mode==='other' && !pendingMeeting.repairDraft.length) return toast('修理者を1名以上選択してください');
+    repair.selected=[...pendingMeeting.repairDraft];
+    repair.confirmed=true;
+    closeMeetingRepairerStep();
+  }
+
   function meetingNumberFromShortcut(event) {
     if (event.altKey || event.ctrlKey || event.metaKey) return 0;
     if (event.shiftKey) {
@@ -409,8 +531,9 @@
 
   function openMeetingDialog(type='button',reporter='') {
     if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
+    const repairs=meetingRepairCandidatesFromCurrentPath();
     commitTurn();
-    pendingMeeting={type,reporter:'',killOccurred:type==='report'?true:null,victims:[],victimsConfirmed:false};
+    pendingMeeting={type,reporter:'',killOccurred:type==='report'?true:null,victims:[],victimsConfirmed:false,repairs,activeRepairIndex:-1,repairDraft:[]};
     fillMeeting();
     $('#meetingTypeLabel').textContent=type==='button'?'ボタン':'死体通報';
     updateMeetingTypeFields();
@@ -432,8 +555,14 @@
       const choosingKill=!$('#meetingKillStep').classList.contains('hidden');
       const choosingReporter=!$('#meetingReporterStep').classList.contains('hidden');
       const choosingVictim=!$('#meetingVictimStep').classList.contains('hidden');
+      const choosingRepairer=!$('#meetingRepairerStep').classList.contains('hidden');
       if (choosingVictim && event.metaKey && event.key==='Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey) {
         confirmMeetingVictims();
+        event.preventDefault();
+        return;
+      }
+      if (choosingRepairer && event.metaKey && event.key==='Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey) {
+        confirmMeetingRepairers();
         event.preventDefault();
         return;
       }
@@ -442,7 +571,7 @@
         event.preventDefault();
         return;
       }
-      if (choosingReporter || choosingVictim) {
+      if (choosingReporter || choosingVictim || choosingRepairer) {
         const number=meetingNumberFromShortcut(event);
         const player=activePlayers().find(candidate=>candidate.meetingNumber===number);
         if (player) {
@@ -450,9 +579,10 @@
             const blockReason=meetingReporterBlockReason(player);
             if (blockReason) toast(blockReason);
             else selectMeetingReporter(player.id);
-          } else if (unavailableVictim(player)) {
+          } else if (choosingVictim && unavailableVictim(player)) {
             toast(`${player.name}はすでに${player.status==='dead'?'死亡':'追放'}済みです`);
-          } else selectMeetingVictim(player.id);
+          } else if (choosingVictim) selectMeetingVictim(player.id);
+          else selectMeetingRepairer(player.id);
           event.preventDefault();
           return;
         }
@@ -525,6 +655,8 @@
   $('#changeMeetingReporter').onclick = showMeetingReporterStep;
   $('#changeMeetingVictim').onclick = showMeetingVictimStep;
   $('#confirmMeetingVictims').onclick = confirmMeetingVictims;
+  $('#confirmMeetingRepairers').onclick = confirmMeetingRepairers;
+  $('#cancelMeetingRepairers').onclick = closeMeetingRepairerStep;
   $('#saveMeeting').onclick = () => {
     const type=pendingMeeting.type, reporter=pendingMeeting.reporter;
     const victims=[...pendingMeeting.victims];
@@ -535,7 +667,15 @@
     const ids=[...$('#alibiPeople').querySelectorAll(':checked')].map(element=>element.value);
     const reason=$('#alibiReason').value.trim();
     const alibis=ids.map(player=>({player,reason}));
-    const meeting={kind:'meeting',turn:game().turn,type,reporter,killOccurred,victims:killOccurred?victims:[],victim:killOccurred?(victims[0]||''):'',bodyPlace:type==='report'?$('#bodyPlace').value.trim():'',witness:$('#witness').value.trim(),note:$('#meetingNote').value.trim(),result:$('#meetingResult').value.trim(),alibis};
+    const repairs=pendingMeeting.repairs.map(repair=>{
+      const sabotage=game().sabotages[repair.sabotageIndex];
+      const repairers=repair.mode==='self'
+        ? [...new Set([game().me,...(repair.confirmed?repair.selected:[])])]
+        : repair.confirmed ? [...repair.selected] : sabotageRepairerIds(sabotage);
+      if (sabotage && repair.confirmed) sabotage.repairers=repairers;
+      return {type:repair.type,mode:repair.mode,repairers,confirmed:repair.confirmed};
+    });
+    const meeting={kind:'meeting',turn:game().turn,type,reporter,killOccurred,victims:killOccurred?victims:[],victim:killOccurred?(victims[0]||''):'',bodyPlace:type==='report'?$('#bodyPlace').value.trim():'',witness:$('#witness').value.trim(),note:$('#meetingNote').value.trim(),result:$('#meetingResult').value.trim(),alibis,repairs};
     game().timeline.push(meeting);
     if (killOccurred) {
       for (const victim of victims) {

@@ -110,6 +110,13 @@ dialog h2 { margin-bottom:14px; }
 .meeting-kill-choice { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:12px; min-height:84px; color:var(--text); background:#121b26; border:1px solid var(--line); font-size:18px; text-align:left; }
 .meeting-kill-choice:hover, .meeting-kill-choice:focus-visible { border-color:var(--accent); background:#1b3040; }
 .meeting-victim-actions { gap:12px; padding-top:12px; font-weight:700; }
+.meeting-repair-summary { padding:11px; border:1px solid var(--line); border-radius:8px; background:#111925; }
+.meeting-repair-summary p { margin:4px 0 0; }
+.meeting-repair-records { display:grid; gap:7px; margin-top:9px; }
+.meeting-repair-record { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; padding:9px 10px; border-radius:7px; background:#162231; }
+.meeting-repair-record .repair-result { color:var(--muted); font-size:13px; }
+.meeting-repair-record .repair-result.recorded { color:var(--accent); }
+.repairer-mark { margin-left:3px; font-size:1.05em; }
 .roster-heading h2 { margin:0; }
 .roster-count { padding:5px 10px; border-radius:999px; color:#07231e; background:var(--accent); font-weight:800; white-space:nowrap; }
 .roster-list { grid-template-columns:repeat(3,minmax(0,1fr)); grid-auto-rows:calc((100% - 18px)/3); min-height:0; max-height:none; gap:9px; }
