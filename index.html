@@ -59,10 +59,23 @@
     <div id="meetingVictimList" class="meeting-person-list"></div>
     <div class="row between meeting-victim-actions"><span id="meetingVictimCount">0名を選択中</span><button type="button" id="confirmMeetingVictims">死亡者を確定（⌘Enter）</button></div>
   </div>
+  <div id="meetingRepairerStep" class="meeting-step meeting-choice-step hidden">
+    <h3 id="meetingRepairerTitle">妨害の修理者を選択</h3>
+    <p id="meetingRepairerHelp" class="shortcuts">参加者を押すか、表示されているキーで複数選択し、⌘Enterで確定してください。</p>
+    <div id="meetingRepairerList" class="meeting-person-list"></div>
+    <div class="row between meeting-victim-actions">
+      <span id="meetingRepairerCount">0名を選択中</span>
+      <div class="row"><button type="button" id="cancelMeetingRepairers" class="secondary">入力画面へ戻る</button><button type="button" id="confirmMeetingRepairers">修理者を確定（⌘Enter）</button></div>
+    </div>
+  </div>
   <div id="meetingDetailsStep" class="meeting-step meeting-details hidden">
     <div class="row between meeting-selection-summary"><span>起票者：<b id="meetingReporterName">未選択</b></span><button type="button" id="changeMeetingReporter" class="secondary small">起票者を変更</button></div>
     <div id="meetingVictimSummary" class="row between meeting-selection-summary hidden"><span>死亡者：<b id="meetingVictimName">未選択</b></span><button type="button" id="changeMeetingVictim" class="secondary small">死亡者を変更</button></div>
     <div class="formgrid">
+      <section id="meetingRepairSummary" class="full meeting-repair-summary hidden">
+        <div><b>妨害修理者</b><p class="shortcuts">経路に含まれる停電・コミュニケーション修理について、判明した修理者を入力できます。</p></div>
+        <div id="meetingRepairRecords" class="meeting-repair-records"></div>
+      </section>
       <label id="bodyPlaceWrap">死体の発見場所<input id="bodyPlace" placeholder="例：アーカイブ"></label>
       <label class="full">視認情報<input id="witness" placeholder="例：T2終盤、AliceがBobを金庫室で視認"></label>
       <label class="full">会議メモ<input id="meetingNote" placeholder="発言・推理・重要情報"></label>
