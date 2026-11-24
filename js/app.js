@@ -11,6 +11,7 @@
   let serverConnected = false;
   let rosterMode = 'first';
   let pendingRoster = null;
+  let pendingMeeting = {type:'button',reporter:'',killOccurred:null,victims:[],victimsConfirmed:false};
 
   if (!Object.hasOwn(state,'session')) {
     const hasProgress=game().turn>1 || game().path.length || game().timeline.length || game().sabotages.length || game().deaths.length;
@@ -78,7 +79,14 @@
     setTimeout(() => element.classList.remove('show'), 1800);
   }
 
-  function activePlayers() { return game().participants.filter(player => player.active); }
+  function ensureParticipantNumbers() {
+    game().participants.forEach((player,index) => { player.meetingNumber=index+1; });
+  }
+
+  function activePlayers() {
+    ensureParticipantNumbers();
+    return game().participants.filter(player => player.active);
+  }
 
   function playerOptions(selected='', includeEmpty=true) {
     return `${includeEmpty ? '<option value="">選択…</option>' : ''}${activePlayers().map(player => `<option value="${esc(player.id)}" ${player.id===selected?'selected':''}>${esc(player.name)}</option>`).join('')}`;
@@ -86,6 +94,11 @@
 
   function playerName(id) {
     return activePlayers().find(player => player.id===id)?.name || state.members.find(player => player.id===id)?.name || '—';
+  }
+
+  function meetingVictimIds(meeting) {
+    if (Array.isArray(meeting.victims) && meeting.victims.length) return meeting.victims.filter(Boolean);
+    return meeting.victim ? [meeting.victim] : [];
   }
 
   function meetingButtonUserIds() {
@@ -118,7 +131,7 @@
     $('#timeline').innerHTML = game().timeline.length
       ? [...game().timeline].reverse().map(item => item.kind==='turn'
         ? `<article class="card"><h3>T${item.turn} <span class="pill">行動</span></h3><div class="detail"><b>経路：</b>${esc(item.path.join(' → ') || '—')}<br><b>視認：</b>${esc(item.seen || '—')}<br><b>メモ：</b>${esc(item.note || '—')}</div></article>`
-        : `<article class="card meeting"><h3>会議 ${item.type==='button'?'緊急ボタン':'死体通報'} <span class="pill">T${item.turn}</span></h3><div class="detail"><b>起票：</b>${esc(playerName(item.reporter))}${item.victim?`　<b>死亡：</b>${esc(playerName(item.victim))} @ ${esc(item.bodyPlace||'不明')}`:''}<br><b>視認：</b>${esc(item.witness||'—')}<br><b>結果：</b>${esc(item.result||'—')}<br><b>メモ：</b>${esc(item.note||'—')}</div>${item.alibis?.length?`<div class="tags">${item.alibis.map(alibi=>`<span class="tag">${esc(playerName(alibi.player))}：${esc(alibi.reason||'白根拠')}</span>`).join('')}</div>`:''}</article>`).join('')
+        : `<article class="card meeting"><h3>会議 ${item.type==='button'?'緊急ボタン':'死体通報'} <span class="pill">T${item.turn}</span></h3><div class="detail"><b>起票：</b>${esc(playerName(item.reporter))}${meetingVictimIds(item).length?`　<b>死亡：</b>${meetingVictimIds(item).map(playerName).map(esc).join('、')} @ ${esc(item.bodyPlace||'不明')}`:''}<br><b>視認：</b>${esc(item.witness||'—')}<br><b>結果：</b>${esc(item.result||'—')}<br><b>メモ：</b>${esc(item.note||'—')}</div>${item.alibis?.length?`<div class="tags">${item.alibis.map(alibi=>`<span class="tag">${esc(playerName(alibi.player))}：${esc(alibi.reason||'白根拠')}</span>`).join('')}</div>`:''}</article>`).join('')
       : '<p class="empty">まだ記録はありません。</p>';
     $('#saboLog').innerHTML = game().sabotages.length
       ? [...game().sabotages].reverse().map(sabotage => `<article class="card"><h3>T${sabotage.turn} ${esc(normalizeSabotageType(sabotage.type))}</h3><div class="detail">${sabotage.action==='occurred'?'<b>状態：</b>発生':`<b>修理：</b>${esc(sabotage.fixer===OTHER_FIXER?'他者':playerName(sabotage.fixer))}`}${sabotage.place?` @ ${esc(sabotage.place)}`:''}${sabotage.note?`<br>${esc(sabotage.note)}`:''}</div></article>`).join('')
@@ -148,16 +161,44 @@
 
   function openDialog(selector) { $(selector).showModal(); }
 
+  const meetingShortcutLabel = number => number<=9 ? String(number) : number===10 ? '0' : `⇧${number-10}`;
+  const unavailableVictim = player => player.status==='dead' || player.status==='ejected';
+  const meetingReporterBlockReason = player => {
+    if (pendingMeeting.type!=='button') return '';
+    if (meetingButtonUserIds().has(player.id)) return 'すでに会議ボタンを使用しています';
+    if (player.status==='dead') return '死亡済みのプレイヤーは会議ボタンを使えません';
+    if (player.status==='ejected') return '追放済みのプレイヤーは会議ボタンを使えません';
+    return '';
+  };
+  const meetingPersonButton = (player,kind) => {
+    const reporterBlocked=kind==='reporter' ? meetingReporterBlockReason(player) : '';
+    const unavailable=kind==='victim' ? unavailableVictim(player) : Boolean(reporterBlocked);
+    const selected=kind==='victim' && pendingMeeting.victims.includes(player.id);
+    const dataAttribute=kind==='victim'?'data-meeting-victim':'data-meeting-reporter';
+    const status=player.status==='dead'?'死亡':player.status==='ejected'?'追放':'';
+    const usedButton=kind==='reporter' && meetingButtonUserIds().has(player.id);
+    return `<button type="button" class="meeting-person${selected?' selected':''}" ${dataAttribute}="${esc(player.id)}" ${kind==='victim'?`aria-pressed="${selected}"`:''} ${unavailable?'disabled aria-disabled="true"':''} ${reporterBlocked?`title="${esc(reporterBlocked)}"`:''}><span class="meeting-player-number">${player.meetingNumber}</span><span class="meeting-player-name">${esc(player.name)}${usedButton?' <span class="meeting-button-used" aria-label="会議ボタン使用済み">🛎️</span>':''}${status?` <span class="meeting-player-status">${status}</span>`:''}</span><kbd class="meeting-key">${meetingShortcutLabel(player.meetingNumber)}</kbd></button>`;
+  };
+
+  function renderMeetingVictimList() {
+    const players=activePlayers().slice(0,13);
+    $('#meetingVictimList').innerHTML = [...players].sort((left,right)=>Number(unavailableVictim(left))-Number(unavailableVictim(right)) || left.meetingNumber-right.meetingNumber).map(player=>meetingPersonButton(player,'victim')).join('');
+    $('#meetingVictimCount').textContent=`${pendingMeeting.victims.length}名を選択中`;
+  }
+
   function fillMeeting() {
-    ['reporter','victim'].forEach(id => $('#'+id).innerHTML=playerOptions());
     $('#alibiPeople').innerHTML = activePlayers().filter(player => player.status==='alive').map(player => `<label><input type="checkbox" value="${esc(player.id)}">${esc(player.name)}</label>`).join('');
+    const players=activePlayers().slice(0,13);
+    const reporters=pendingMeeting.type==='button' ? [...players].sort((left,right)=>Number(unavailableVictim(left))-Number(unavailableVictim(right)) || left.meetingNumber-right.meetingNumber) : players;
+    $('#meetingReporterList').innerHTML = reporters.map(player=>meetingPersonButton(player,'reporter')).join('');
+    renderMeetingVictimList();
   }
 
   function createId(name) { return `${Date.now()}-${Math.random().toString(36).slice(2,7)}-${name}`; }
   function createGameState(selectedIds=[],host='',gameNumber=1,sessionId='') {
     const selected=new Set(selectedIds);
     if (selfPlayer) selected.add(selfPlayer.id);
-    const participants=state.members.filter(member=>selected.has(member.id)).map(member=>({...member,active:true,status:'alive'}));
+    const participants=state.members.filter(member=>selected.has(member.id)).map((member,index)=>({...member,active:true,status:'alive',meetingNumber:index+1}));
     return {id:createId('game'),sessionId,gameNumber,me:selfPlayer?.id||'',role:'',rules:'',host,participants,turn:1,path:[],seen:'',note:'',timeline:[],sabotages:[],deaths:[]};
   }
   const keyLabel = key => key && key===key.toUpperCase() ? `⇧${key.toLowerCase()}` : key;
@@ -196,6 +237,21 @@
   }
 
   document.addEventListener('click', event => {
+    const meetingReporter = event.target.closest('[data-meeting-reporter]');
+    if (meetingReporter) {
+      selectMeetingReporter(meetingReporter.dataset.meetingReporter);
+      return;
+    }
+    const meetingKill = event.target.closest('[data-meeting-kill]');
+    if (meetingKill) {
+      selectMeetingKillOccurred(meetingKill.dataset.meetingKill==='yes');
+      return;
+    }
+    const meetingVictim = event.target.closest('[data-meeting-victim]');
+    if (meetingVictim && !meetingVictim.disabled) {
+      selectMeetingVictim(meetingVictim.dataset.meetingVictim);
+      return;
+    }
     const room = event.target.closest('[data-room]');
     if (room) {
       game().path.push(room.dataset.room);
@@ -268,19 +324,99 @@
   }
 
   function updateMeetingTypeFields() {
-    const report=$('#meetingType').value==='report';
-    $('#victimWrap').classList.toggle('hidden',!report);
+    const report=pendingMeeting.type==='report';
+    const hasVictim=pendingMeeting.victims.length>0;
     $('#bodyPlaceWrap').classList.toggle('hidden',!report);
+    $('#meetingVictimSummary').classList.toggle('hidden',!hasVictim);
+  }
+
+  function showMeetingStep(id) {
+    ['meetingReporterStep','meetingKillStep','meetingVictimStep','meetingDetailsStep'].forEach(stepId=>$('#'+stepId).classList.toggle('hidden',stepId!==id));
+    $('#saveMeeting').classList.toggle('hidden',id!=='meetingDetailsStep');
+  }
+
+  function showMeetingReporterStep() {
+    showMeetingStep('meetingReporterStep');
+  }
+
+  function continueMeetingFlow() {
+    if (!pendingMeeting.reporter) return showMeetingReporterStep();
+    if (pendingMeeting.type==='button' && pendingMeeting.killOccurred===null) return showMeetingStep('meetingKillStep');
+    if (pendingMeeting.type==='report') pendingMeeting.killOccurred=true;
+    if (pendingMeeting.killOccurred && (!pendingMeeting.victimsConfirmed || !pendingMeeting.victims.length)) return showMeetingVictimStep();
+    updateMeetingTypeFields();
+    showMeetingStep('meetingDetailsStep');
+    requestAnimationFrame(() => $('#witness').focus());
+  }
+
+  function selectMeetingReporter(id) {
+    const reporter=activePlayers().find(player=>player.id===id);
+    if (!reporter) return;
+    const blockReason=meetingReporterBlockReason(reporter);
+    if (blockReason) return toast(blockReason);
+    pendingMeeting.reporter=reporter.id;
+    $('#meetingReporterName').textContent=`${reporter.name}（${meetingShortcutLabel(reporter.meetingNumber)}）`;
+    continueMeetingFlow();
+  }
+
+  function selectMeetingKillOccurred(killOccurred) {
+    pendingMeeting.killOccurred=killOccurred;
+    if (!killOccurred) {
+      pendingMeeting.victims=[];
+      pendingMeeting.victimsConfirmed=true;
+    } else {
+      pendingMeeting.victimsConfirmed=false;
+    }
+    continueMeetingFlow();
+  }
+
+  function showMeetingVictimStep() {
+    pendingMeeting.victimsConfirmed=false;
+    renderMeetingVictimList();
+    showMeetingStep('meetingVictimStep');
+  }
+
+  function selectMeetingVictim(id) {
+    const victim=activePlayers().find(player=>player.id===id && !unavailableVictim(player));
+    if (!victim) return;
+    const selectedIndex=pendingMeeting.victims.indexOf(victim.id);
+    if (selectedIndex===-1) pendingMeeting.victims.push(victim.id);
+    else pendingMeeting.victims.splice(selectedIndex,1);
+    pendingMeeting.victimsConfirmed=false;
+    renderMeetingVictimList();
+  }
+
+  function confirmMeetingVictims() {
+    if (!pendingMeeting.victims.length) return toast('死亡者を1名以上選択してください');
+    pendingMeeting.victimsConfirmed=true;
+    $('#meetingVictimName').textContent=pendingMeeting.victims.map(id => {
+      const victim=activePlayers().find(player=>player.id===id);
+      return victim ? `${victim.name}（${meetingShortcutLabel(victim.meetingNumber)}）` : playerName(id);
+    }).join('、');
+    continueMeetingFlow();
+  }
+
+  function meetingNumberFromShortcut(event) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return 0;
+    if (event.shiftKey) {
+      const match=event.code.match(/^Digit([1-3])$/);
+      return match ? 10+Number(match[1]) : 0;
+    }
+    if (event.code==='Digit0') return 10;
+    const match=event.code.match(/^Digit([1-9])$/);
+    return match ? Number(match[1]) : 0;
   }
 
   function openMeetingDialog(type='button',reporter='') {
     if (!state.session) return toast('先に参加者を確定してゲームを開始してください');
     commitTurn();
+    pendingMeeting={type,reporter:'',killOccurred:type==='report'?true:null,victims:[],victimsConfirmed:false};
     fillMeeting();
-    $('#meetingType').value=type;
-    $('#reporter').value=reporter;
+    $('#meetingTypeLabel').textContent=type==='button'?'ボタン':'死体通報';
     updateMeetingTypeFields();
     $('#meetingDialog').showModal();
+    if (reporter) selectMeetingReporter(reporter);
+    else continueMeetingFlow();
   }
 
   function openMeetingFromLastPathEvent() {
@@ -291,6 +427,37 @@
   }
 
   document.addEventListener('keydown', event => {
+    const meetingDialogOpen=$('#meetingDialog').open;
+    if (meetingDialogOpen && state.shortcutsEnabled) {
+      const choosingKill=!$('#meetingKillStep').classList.contains('hidden');
+      const choosingReporter=!$('#meetingReporterStep').classList.contains('hidden');
+      const choosingVictim=!$('#meetingVictimStep').classList.contains('hidden');
+      if (choosingVictim && event.metaKey && event.key==='Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey) {
+        confirmMeetingVictims();
+        event.preventDefault();
+        return;
+      }
+      if (choosingKill && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && (event.code==='Digit1' || event.code==='Digit2')) {
+        selectMeetingKillOccurred(event.code==='Digit1');
+        event.preventDefault();
+        return;
+      }
+      if (choosingReporter || choosingVictim) {
+        const number=meetingNumberFromShortcut(event);
+        const player=activePlayers().find(candidate=>candidate.meetingNumber===number);
+        if (player) {
+          if (choosingReporter) {
+            const blockReason=meetingReporterBlockReason(player);
+            if (blockReason) toast(blockReason);
+            else selectMeetingReporter(player.id);
+          } else if (unavailableVictim(player)) {
+            toast(`${player.name}はすでに${player.status==='dead'?'死亡':'追放'}済みです`);
+          } else selectMeetingVictim(player.id);
+          event.preventDefault();
+          return;
+        }
+      }
+    }
     if (document.querySelector('dialog[open]')) return;
     if (!state.shortcutsEnabled) return;
     const isMeetingConfirm=event.metaKey && event.key==='Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey;
@@ -355,20 +522,27 @@
     render();
     toast(fixer===game().me?'修理を経路に追加しました':'修理を記録しました');
   };
-  $('#meetingType').onchange = updateMeetingTypeFields;
+  $('#changeMeetingReporter').onclick = showMeetingReporterStep;
+  $('#changeMeetingVictim').onclick = showMeetingVictimStep;
+  $('#confirmMeetingVictims').onclick = confirmMeetingVictims;
   $('#saveMeeting').onclick = () => {
-    const type=$('#meetingType').value, reporter=$('#reporter').value, victim=$('#victim').value;
+    const type=pendingMeeting.type, reporter=pendingMeeting.reporter;
+    const victims=[...pendingMeeting.victims];
+    const killOccurred=type==='report' || pendingMeeting.killOccurred===true;
     if (!reporter) return toast('起票者を選択してください');
-    if (type==='report'&&!victim) return toast('死亡者を選択してください');
+    if (type==='button' && pendingMeeting.killOccurred===null) return toast('キル発生の有無を選択してください');
+    if (killOccurred && (!pendingMeeting.victimsConfirmed || !victims.length)) return toast('死亡者を選択して確定してください');
     const ids=[...$('#alibiPeople').querySelectorAll(':checked')].map(element=>element.value);
     const reason=$('#alibiReason').value.trim();
     const alibis=ids.map(player=>({player,reason}));
-    const meeting={kind:'meeting',turn:game().turn,type,reporter,victim:type==='report'?victim:'',bodyPlace:$('#bodyPlace').value.trim(),witness:$('#witness').value.trim(),note:$('#meetingNote').value.trim(),result:$('#meetingResult').value.trim(),alibis};
+    const meeting={kind:'meeting',turn:game().turn,type,reporter,killOccurred,victims:killOccurred?victims:[],victim:killOccurred?(victims[0]||''):'',bodyPlace:type==='report'?$('#bodyPlace').value.trim():'',witness:$('#witness').value.trim(),note:$('#meetingNote').value.trim(),result:$('#meetingResult').value.trim(),alibis};
     game().timeline.push(meeting);
-    if (type==='report') {
-      const player=activePlayers().find(player=>player.id===victim);
-      if (player) player.status='dead';
-      game().deaths.push({...meeting});
+    if (killOccurred) {
+      for (const victim of victims) {
+        const player=activePlayers().find(candidate=>candidate.id===victim);
+        if (player) player.status='dead';
+        game().deaths.push({...meeting,victim});
+      }
     }
     $('#meetingDialog').close();
     game().turn++;
@@ -643,7 +817,7 @@
   $('#copyLog').onclick = async () => {
     const lines=[`Among Memo / ${game().role}`,`自分: ${playerName(game().me)}`,`ホスト: ${playerName(game().host)}`,`ルール: ${game().rules||'—'}`,'',...game().timeline.map(item=>item.kind==='turn'
       ? `[T${item.turn}] 経路: ${item.path.join(' → ')||'—'} / 視認: ${item.seen||'—'} / ${item.note||''}`
-      : `[会議 T${item.turn}] ${item.type==='button'?'ボタン':'通報'}: ${playerName(item.reporter)}${item.victim?` / 死亡: ${playerName(item.victim)} @ ${item.bodyPlace||'不明'}`:''}\n視認: ${item.witness||'—'} / 結果: ${item.result||'—'}${item.alibis?.length?`\nキル不可: ${item.alibis.map(alibi=>`${playerName(alibi.player)}（${alibi.reason||'理由なし'}）`).join('、')}`:''}`)];
+      : `[会議 T${item.turn}] ${item.type==='button'?'ボタン':'通報'}: ${playerName(item.reporter)}${meetingVictimIds(item).length?` / 死亡: ${meetingVictimIds(item).map(playerName).join('、')} @ ${item.bodyPlace||'不明'}`:''}\n視認: ${item.witness||'—'} / 結果: ${item.result||'—'}${item.alibis?.length?`\nキル不可: ${item.alibis.map(alibi=>`${playerName(alibi.player)}（${alibi.reason||'理由なし'}）`).join('、')}`:''}`)];
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
       toast('試合ログをコピーしました');
