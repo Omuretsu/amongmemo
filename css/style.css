@@ -39,9 +39,25 @@ button.small { padding:4px 7px; font-size:12px; }
 .alive { color:#69e5c0; }
 .dead { color:#ff91a1; }
 .ejected { color:#f9c74f; }
-.players { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:7px; }
-.player { display:flex; align-items:center; gap:6px; padding:7px; border:1px solid var(--line); border-radius:7px; background:#121b26; }
-.player select { padding:3px; font-size:11px; margin-left:auto; max-width:68px; }
+.players { display:grid; grid-template-columns:minmax(0,1fr); gap:7px; }
+.player { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; min-width:0; padding:8px 9px; border:1px solid var(--line); border-radius:7px; background:#121b26; }
+.player.player-muted { background:#0f161f; border-color:#293746; }
+.player.player-muted .player-identity { opacity:.55; filter:grayscale(.35); }
+.player.player-muted .player-status:not(.selected) { opacity:.55; }
+.player-identity { display:grid; grid-template-columns:minmax(0,1fr) 104px; align-items:center; gap:8px; min-width:0; }
+.player-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; }
+.player-icons { display:grid; grid-template-columns:repeat(4,22px); align-items:center; justify-items:center; gap:4px; }
+.player-icon { display:inline-grid; place-items:center; width:22px; height:22px; font-size:16px; line-height:1; }
+.player-icon.inactive { visibility:hidden; }
+.player-statuses { display:grid; grid-template-columns:repeat(3,48px); gap:4px; }
+.player-status { padding:5px 4px; border:1px solid var(--line); color:var(--muted); background:#111925; font-size:11px; }
+.player-status.selected { color:white; }
+.player-status.status-alive.selected { color:#07231e; background:#58d6b0; border-color:#58d6b0; }
+.player-status.status-dead.selected { background:#b83d52; border-color:#d65b70; }
+.player-status.status-ejected.selected { color:#d7dee6; background:#46515e; border-color:#687583; }
+.player-status.status-linked.selected { background:#76519a; border-color:#9873ba; }
+.player-status.status-executed.selected { color:#302400; background:#f9c74f; border-color:#f9c74f; }
+.player-status.status-misfire.selected { color:#aab4bf; background:#343d47; border-color:#596571; }
 .meeting-button-used { margin-left:3px; font-size:1.05em; }
 .log { display:grid; gap:9px; max-height:440px; overflow:auto; padding-right:3px; }
 .card { background:#121b26; border-left:3px solid var(--blue); border-radius:6px; padding:9px; }
@@ -116,7 +132,6 @@ dialog h2 { margin-bottom:14px; }
 .meeting-repair-record { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; padding:9px 10px; border-radius:7px; background:#162231; }
 .meeting-repair-record .repair-result { color:var(--muted); font-size:13px; }
 .meeting-repair-record .repair-result.recorded { color:var(--accent); }
-.repairer-mark { margin-left:3px; font-size:1.05em; }
 .roster-heading h2 { margin:0; }
 .roster-count { padding:5px 10px; border-radius:999px; color:#07231e; background:var(--accent); font-weight:800; white-space:nowrap; }
 .roster-list { grid-template-columns:repeat(3,minmax(0,1fr)); grid-auto-rows:calc((100% - 18px)/3); min-height:0; max-height:none; gap:9px; }
@@ -132,6 +147,11 @@ dialog h2 { margin-bottom:14px; }
   .grid { grid-template-columns:1fr 1fr; }
   .span2 { grid-column:span 2; }
   .roster-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+@media(max-width:760px) {
+  .player { grid-template-columns:minmax(0,1fr); }
+  .player-statuses { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
 
 @media(max-width:620px) {
