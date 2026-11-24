@@ -132,6 +132,32 @@
     return {blackout,communications};
   }
 
+  const PLAYER_STATUSES = [
+    ['alive','生存'],
+    ['dead','死亡'],
+    ['ejected','追放'],
+    ['linked','道連れ'],
+    ['executed','執行'],
+    ['misfire','誤爆']
+  ];
+  const normalizedPlayerStatus = status => PLAYER_STATUSES.some(([value])=>value===status) ? status : 'alive';
+  const playerStatusLabel = status => PLAYER_STATUSES.find(([value])=>value===normalizedPlayerStatus(status))?.[1] || '生存';
+  const mutedPlayerStatus = status => ['dead','ejected','linked','executed','misfire'].includes(normalizedPlayerStatus(status));
+  const PLAYER_SPECIAL_STATUSES = {
+    sheriff:{icon:'⚔️',label:'シェリフCO'},
+    madmate:{icon:'👿',label:'マッドメイト'}
+  };
+  const playerIcon = (icon,active,label) => `<span class="player-icon${active?' active':' inactive'}" ${active?`title="${label}" aria-label="${label}"`:'aria-hidden="true"'}>${icon}</span>`;
+  const playerSpecialIcon = player => {
+    const status=PLAYER_SPECIAL_STATUSES[player.specialStatus];
+    return playerIcon(status?.icon||'⚔️',Boolean(status),status?.label||'特殊状態');
+  };
+  const playerStatusButtons = player => {
+    const status=normalizedPlayerStatus(player.status);
+    return `<div class="player-statuses" role="group" aria-label="${esc(player.name)}のステータス">${PLAYER_STATUSES.map(([value,label])=>`<button type="button" class="player-status status-${value}${status===value?' selected':''}" data-status="${esc(player.id)}" data-status-value="${value}" aria-pressed="${status===value}">${label}</button>`).join('')}</div>`;
+  };
+  const playerCard = (player,buttonUsers,repairerIcons) => `<div class="player${mutedPlayerStatus(player.status)?' player-muted':''}"><div class="player-identity"><span class="player-name">${esc(player.name)}${player.id===game().host?' <span class="pill">ホスト</span>':''}</span><span class="player-icons">${playerIcon('🛎️',buttonUsers.has(player.id),'会議ボタン使用済み')}${playerIcon('⚡️',repairerIcons.blackout.has(player.id),'停電の修理者')}${playerIcon('📡',repairerIcons.communications.has(player.id),'コミュニケーションの修理者')}${playerSpecialIcon(player)}</span></div>${playerStatusButtons(player)}</div>`;
+
   function render() {
     const buttonUsers=meetingButtonUserIds();
     const repairerIcons=repairerIconSets();
@@ -147,7 +173,7 @@
     $('#shortcutToggle').setAttribute('aria-pressed',String(state.shortcutsEnabled));
     $('#shortcutToggle').classList.toggle('enabled',state.shortcutsEnabled);
     $('#players').innerHTML = activePlayers().length
-      ? activePlayers().map(player => `<div class="player"><span>${esc(player.name)}${buttonUsers.has(player.id)?' <span class="meeting-button-used" title="会議ボタン使用済み" aria-label="会議ボタン使用済み">🛎️</span>':''}${repairerIcons.blackout.has(player.id)?' <span class="repairer-mark" title="停電の修理者" aria-label="停電の修理者">⚡️</span>':''}${repairerIcons.communications.has(player.id)?' <span class="repairer-mark" title="コミュニケーションの修理者" aria-label="コミュニケーションの修理者">📡</span>':''}${player.id===game().host?' <span class="pill">ホスト</span>':''}</span><select data-status="${esc(player.id)}"><option value="alive" ${player.status==='alive'?'selected':''}>生存</option><option value="dead" ${player.status==='dead'?'selected':''}>死亡</option><option value="ejected" ${player.status==='ejected'?'selected':''}>追放</option></select></div>`).join('')
+      ? activePlayers().map(player => playerCard(player,buttonUsers,repairerIcons)).join('')
       : '<p class="empty">メンバー管理から参加者を登録してください。</p>';
     $('#path').innerHTML = game().path.length
       ? game().path.map((room,index) => `<span class="room ${isSabotagePathLabel(room)?'repair':''}">${esc(room)} <button data-remove-path="${index}" title="削除">×</button></span>`).join(' → ')
@@ -192,12 +218,15 @@
   function openDialog(selector) { $(selector).showModal(); }
 
   const meetingShortcutLabel = number => number<=9 ? String(number) : number===10 ? '0' : `⇧${number-10}`;
-  const unavailableVictim = player => player.status==='dead' || player.status==='ejected';
+  const unavailableVictim = player => ['dead','ejected','linked','executed','misfire'].includes(player.status);
   const meetingReporterBlockReason = player => {
     if (pendingMeeting.type!=='button') return '';
     if (meetingButtonUserIds().has(player.id)) return 'すでに会議ボタンを使用しています';
     if (player.status==='dead') return '死亡済みのプレイヤーは会議ボタンを使えません';
     if (player.status==='ejected') return '追放済みのプレイヤーは会議ボタンを使えません';
+    if (player.status==='linked') return '道連れ済みのプレイヤーは会議ボタンを使えません';
+    if (player.status==='executed') return '執行済みのプレイヤーは会議ボタンを使えません';
+    if (player.status==='misfire') return '誤爆済みのプレイヤーは会議ボタンを使えません';
     return '';
   };
   const meetingPersonButton = (player,kind) => {
@@ -206,7 +235,7 @@
     const unavailable=kind==='victim' ? unavailableVictim(player) : kind==='repairer' ? repairerBlocked : Boolean(reporterBlocked);
     const selected=kind==='victim' ? pendingMeeting.victims.includes(player.id) : kind==='repairer' ? pendingMeeting.repairDraft.includes(player.id) : false;
     const dataAttribute=kind==='victim'?'data-meeting-victim':kind==='repairer'?'data-meeting-repairer':'data-meeting-reporter';
-    const status=player.status==='dead'?'死亡':player.status==='ejected'?'追放':'';
+    const status=normalizedPlayerStatus(player.status)==='alive'?'':playerStatusLabel(player.status);
     const usedButton=kind==='reporter' && meetingButtonUserIds().has(player.id);
     const blockedReason=reporterBlocked || (repairerBlocked?'自分以外の修理者を選択してください':'');
     return `<button type="button" class="meeting-person${selected?' selected':''}" ${dataAttribute}="${esc(player.id)}" ${kind==='victim'||kind==='repairer'?`aria-pressed="${selected}"`:''} ${unavailable?'disabled aria-disabled="true"':''} ${blockedReason?`title="${esc(blockedReason)}"`:''}><span class="meeting-player-number">${player.meetingNumber}</span><span class="meeting-player-name">${esc(player.name)}${usedButton?' <span class="meeting-button-used" aria-label="会議ボタン使用済み">🛎️</span>':''}${status?` <span class="meeting-player-status">${status}</span>`:''}</span><kbd class="meeting-key">${meetingShortcutLabel(player.meetingNumber)}</kbd></button>`;
@@ -352,11 +381,14 @@
       render();
       return;
     }
-    const status = event.target.closest('[data-status]');
-    if (status && event.target.tagName==='SELECT') {
-      activePlayers().find(player => player.id===status.dataset.status).status=event.target.value;
+    const status = event.target.closest('[data-status][data-status-value]');
+    if (status) {
+      const player=activePlayers().find(candidate => candidate.id===status.dataset.status);
+      if (!player) return;
+      player.status=status.dataset.statusValue;
       save();
       render();
+      return;
     }
   });
 
@@ -580,7 +612,7 @@
             if (blockReason) toast(blockReason);
             else selectMeetingReporter(player.id);
           } else if (choosingVictim && unavailableVictim(player)) {
-            toast(`${player.name}はすでに${player.status==='dead'?'死亡':'追放'}済みです`);
+            toast(`${player.name}はすでに${playerStatusLabel(player.status)}扱いです`);
           } else if (choosingVictim) selectMeetingVictim(player.id);
           else selectMeetingRepairer(player.id);
           event.preventDefault();
